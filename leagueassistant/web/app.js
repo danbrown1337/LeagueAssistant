@@ -360,11 +360,26 @@ function renderGame(s) {
 
   let side = "";
   if (g.buildProgress && g.build) {
-    const next = g.buildProgress.find((i) => !i.owned) ||
+    const adv = g.advice;
+    const next = adv?.next || g.buildProgress.find((i) => !i.owned) ||
       (g.build.later.flat().find((o) => !g.me.items.some((i) => i.id === o.id)));
+    const urgent = adv?.next && adv.next.priority >= 2;
+    const nextCard = next ? `
+      <div class="next-item ${urgent ? "urgent" : ""}">${icon(next, "lg")}
+        <div style="min-width:0"><div class="muted" style="font-size:12px">BUY NEXT${next.cost ? ` · ${num(next.cost)} gold` : ""}</div>
+          <div class="n">${esc(next.name)}</div>
+          ${next.reason ? `<div class="why">${esc(next.reason)}</div>` : ""}
+          ${adv?.affordable ? `<div class="afford">${icon(adv.affordable, "sm")}<span>You have ${num(g.gold)} gold: buy <b>${esc(adv.affordable.name)}</b> (${num(adv.affordable.cost)}) now.</span></div>` : ""}
+        </div></div>` : "";
+    const chips = adv?.threats?.length ? `<div class="chips">${adv.threats.map((c) => `<span class="chip ${c.level}">${esc(c.label)}</span>`).join("")}</div>` : "";
+    const extra = [...(adv?.situational || []), ...(adv?.boots && adv.boots.id !== next?.id ? [adv.boots] : [])];
+    const situational = extra.length ? `<h3>For this game</h3>${extra.map((p) => `
+      <div class="sit">${icon(p, "sm")}<div style="min-width:0"><div class="sname">${esc(p.name)}</div><div class="why">${esc(p.reason)}</div></div></div>`).join("")}` : "";
     side = `
       <div class="panel gold"><h2>Your build · ${esc(g.build.champion.name)}${g.build.role === "aram" ? " · ARAM" : ""}</h2>
-        ${next ? `<div class="next-item">${icon(next, "lg")}<div><div class="muted" style="font-size:12px">BUY NEXT</div><div class="n">${esc(next.name)}</div></div></div>` : ""}
+        ${chips}
+        ${nextCard}
+        ${situational}
         <h3>Core</h3><div class="item-row" style="margin:6px 0 12px">${g.buildProgress.map((i) => `<span class="owned ${i.owned ? "have" : ""}">${icon(i)}</span>`).join('<span class="arrow">›</span>')}</div>
         <h3>Later options</h3>${g.build.later.map((slot, i) => `<div class="item-row" style="margin-top:6px"><span class="slot-label">${i + 4}</span>${slot.map((o) => `<div class="opt">${icon(o, "sm")}<span class="p">${pct(o.winRate)}</span></div>`).join("")}</div>`).join("")}
         <h3 style="margin-top:12px">Skills</h3><div class="prio" style="margin-top:6px">${g.build.skills.priority.map((k) => `<span class="key">${k}</span>`).join('<span class="arrow">›</span>')}</div>

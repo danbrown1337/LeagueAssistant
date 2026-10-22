@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import time
 
+from . import itemizer
 from .ddragon import DDragon
 from .lcu import ChampSelectState
 from .ugg import UGG, Build, Matchup
@@ -284,6 +285,11 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         owned = {i["id"] for i in me["items"]}
         progress = [{**i, "owned": i["id"] in owned} for i in my_build["core"]]
 
+    advice = None
+    if me and my_build:
+        advice = itemizer.advise(me, enemies, my_build, dd, gold=round(active.get("currentGold", 0)),
+                                 game_time=game.get("gameData", {}).get("gameTime", 0), aram=mode["kind"] == "aram")
+
     return {
         "gameTime": game.get("gameData", {}).get("gameTime", 0),
         "mode": mode,
@@ -295,6 +301,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         "score": {"ally": totals(allies, my_team), "enemy": totals(enemies, enemy_team)},
         "build": my_build,
         "buildProgress": progress,
+        "advice": advice,
     }
 
 

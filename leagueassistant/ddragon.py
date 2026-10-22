@@ -55,6 +55,15 @@ class DDragon:
     def items(self) -> dict[int, str]:
         return {iid: v["name"] for iid, v in self._item_data.items()}
 
+    def item(self, iid: int) -> dict:
+        return self._item_data.get(iid, {})
+
+    def all_items(self) -> dict[int, dict]:
+        return self._item_data
+
+    def champion(self, cid: int) -> dict:
+        return self._champion_data.get(cid, {})
+
     def item_cost(self, iid: int) -> int:
         return self._item_data.get(iid, {}).get("gold", {}).get("total", 0)
 

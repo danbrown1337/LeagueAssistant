@@ -7,8 +7,11 @@ on a phone, tablet or second monitor. It follows your game:
   shows the best counters you own, your matchup win rate and the full U.gg
   build (runes, spells, items, skill order). Updates as picks come in.
 - **In game:** live scoreboard with kills, towers, drakes, barons and item gold
-  lead; every player's items, KDA, CS and respawn timers; your build with
-  what to buy next; your lane opponent's items.
+  lead; every player's items, KDA, CS and respawn timers; your lane opponent's
+  items; and a build that adjusts to the game. Every update it reads the enemy
+  team (how much of their damage is magic or physical, healing, armor and
+  magic resist stacking, crowd control, who is fed) and tells you what to buy
+  next and why, including the part you can afford right now.
 - **Post game:** the rank of every player in the game you just played, and the
   average rank of your team, the enemy team and the whole lobby. This shows
   roughly what level you're playing at.
@@ -156,6 +159,15 @@ leagueassistant history --riot-id "Name#TAG"  # needs RIOT_API_KEY
 | U.gg (`stats2.u.gg`) | Builds, matchups, role play rates | Unofficial; the format can change without notice |
 | Data Dragon | Names and icons for champions, items, runes, spells | Official static data |
 | Riot API | Match history by Riot ID | Optional, needs a key from developer.riotgames.com |
+
+The in-game build starts from U.gg's core build. A situational item jumps
+ahead of it only for an urgent threat (heavy healing, three or more enemies
+stacking armor or magic resist, or a fed assassin of the damage type it
+counters), and only once you have your first core item or the game is past 15
+minutes. Situational items are chosen from Data Dragon's item stats to suit
+how your champion builds (magic damage, attack damage, crit or tank), and U.gg
+picks for your champion win ties. Who counts as a healer or as heavy crowd
+control is a hand-written list in `leagueassistant/itemizer.py`.
 
 Counter picks are ranked by matchup win rate pulled toward 50% for small
 samples, and champions that play the role in under 10% of their games are
