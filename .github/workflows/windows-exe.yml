@@ -1,0 +1,67 @@
+name: Windows exe
+
+# Every push to main builds leagueassistant.exe and publishes it as the "latest" release.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -e ".[server,dev]"
+      - run: pytest -q
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install ".[server]" pyinstaller
+      - run: pyinstaller --noconfirm packaging/leagueassistant.spec
+
+      - name: Smoke test the exe
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\leagueassistant.exe -ArgumentList "--no-browser" -PassThru -NoNewWindow
+          $ok = $false
+          for ($i = 0; $i -lt 60; $i++) {
+            try { Invoke-WebRequest http://127.0.0.1:8080/healthz -UseBasicParsing | Out-Null; $ok = $true; break }
+            catch { Start-Sleep -Seconds 1 }
+          }
+          if ($ok) {
+            Start-Sleep -Seconds 5  # let the agent send its first update
+            $page = Invoke-WebRequest http://127.0.0.1:8080/ -UseBasicParsing
+            $js = Invoke-WebRequest http://127.0.0.1:8080/static/app.js -UseBasicParsing
+            $state = Invoke-RestMethod http://127.0.0.1:8080/api/state
+            Write-Host "index $($page.StatusCode), app.js $($js.StatusCode), agentOnline $($state.agentOnline), patch $($state.stats.patch)"
+            if (-not $state.agentOnline) { Write-Error "The agent never reached the server"; $ok = $false }
+          }
+          Stop-Process -Id $p.Id -Force
+          if (-not $ok) { exit 1 }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: leagueassistant-windows
+          path: dist/leagueassistant.exe
+
+      - name: Publish as the latest release
+        if: github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          notes="Built from ${GITHUB_SHA::7}. Download leagueassistant.exe and double-click it."
+          gh release delete latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create latest dist/leagueassistant.exe --title "Latest build" --notes "$notes" --target "$GITHUB_SHA" --latest
