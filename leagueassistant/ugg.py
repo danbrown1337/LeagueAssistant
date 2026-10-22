@@ -28,6 +28,8 @@ RANKS = {
     "diamond_2_plus": "15", "emerald": "16", "emerald_plus": "17",
 }
 ROLES = {"jungle": "1", "support": "2", "adc": "3", "top": "4", "mid": "5"}
+# ARAM stats have one role and one rank bucket.
+ARAM_QUEUE, ARAM_RANK, ARAM_ROLE = "normal_aram", "8", "6"
 ROLE_ORDER = ["top", "jungle", "mid", "adc", "support"]
 
 # League client assignedPosition -> U.gg role name
@@ -87,9 +89,9 @@ class UGG:
         self.session = requests.Session()
         self.session.headers["User-Agent"] = USER_AGENT
 
-    def _fetch(self, kind: str, champion_id: int) -> dict:
+    def _fetch(self, kind: str, champion_id: int, queue: str = "ranked_solo_5x5") -> dict:
         """Fetch a stats file, falling back to the previous patch early in a new one."""
-        key = (kind, champion_id)
+        key = (kind, champion_id, queue)
         if key in self._cache:
             return self._cache[key]
         major, minor = (int(x) for x in self.patch.split("."))
@@ -98,7 +100,7 @@ class UGG:
             candidates.append(f"{major}_{minor - 1}")
         last_error = None
         for patch in candidates:
-            url = f"{BASE}/{kind}/{patch}/ranked_solo_5x5/{champion_id}/{API_VERSION}.json"
+            url = f"{BASE}/{kind}/{patch}/{queue}/{champion_id}/{API_VERSION}.json"
             r = self.session.get(url, timeout=30)
             if r.status_code == 200:
                 self._cache[key] = r.json()
@@ -131,6 +133,16 @@ class UGG:
         if not entry:
             raise LookupError(f"No build data for champion {champion_id} in {role}")
         return parse_build(champion_id, role, entry[0])
+
+    def aram_build(self, champion_id: int) -> Build:
+        data = self._fetch("overview", champion_id, ARAM_QUEUE)
+        try:
+            entry = data[REGIONS[self.region]][ARAM_RANK][ARAM_ROLE]
+        except KeyError:
+            entry = None
+        if not entry:
+            raise LookupError(f"No ARAM build data for champion {champion_id}")
+        return parse_build(champion_id, "aram", entry[0])
 
     def matchups(self, champion_id: int, role: str | None = None) -> list[Matchup]:
         """How this champion does against each lane opponent in the given role."""

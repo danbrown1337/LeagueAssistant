@@ -38,6 +38,7 @@ class Agent:
         self.history: list[dict] = []
         self.history_due = 0.0
         self.post_game: dict | None = None
+        self.queue: dict | None = None
         self.last_hash = None
         self.last_sent = 0.0
 
@@ -70,6 +71,7 @@ class Agent:
         phase = self.client.phase()
         snap = {"clientConnected": True, "phase": phase}
         if phase != self.last_phase:
+            self.queue = self.client.queue() if phase != "None" else None
             if phase == "ChampSelect":
                 self.pickable = sorted(self.client.pickable_champions())
             if phase in HISTORY_PHASES:
@@ -84,6 +86,8 @@ class Agent:
                 self.history_due = time.time() + 30
         if self.history:
             snap["history"] = self.history
+        if self.queue:
+            snap["queue"] = self.queue
 
         if phase == "ChampSelect":
             snap["champSelect"] = self.client.champ_select()

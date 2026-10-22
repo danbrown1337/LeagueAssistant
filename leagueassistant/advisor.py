@@ -19,6 +19,24 @@ QUEUES = {
 }
 
 
+MODE_NAMES = {
+    "CLASSIC": "Summoner's Rift", "ARAM": "ARAM", "CHERRY": "Arena", "URF": "URF", "ARURF": "ARURF",
+    "ONEFORALL": "One for All", "NEXUSBLITZ": "Nexus Blitz", "ULTBOOK": "Ultimate Spellbook", "STRAWBERRY": "Swarm",
+}
+
+
+def game_mode(queue: dict | None = None, live: dict | None = None, session: dict | None = None) -> dict:
+    """Which game mode this is. `kind` is sr (U.gg ranked data fits), aram, or other (no U.gg data)."""
+    mode = ((live or {}).get("gameData") or {}).get("gameMode") or (queue or {}).get("gameMode")
+    if not mode and session and session.get("benchEnabled"):
+        mode = "ARAM"  # an older agent that doesn't send the queue
+    mode = (mode or "CLASSIC").upper()
+    qid = (queue or {}).get("id")
+    kind = {"CLASSIC": "sr", "ARAM": "aram"}.get(mode, "other")
+    label = QUEUES.get(qid) or (queue or {}).get("description") or MODE_NAMES.get(mode, mode.title())
+    return {"kind": kind, "gameMode": mode, "queueId": qid, "label": label}
+
+
 def pct(x: float) -> str:
     return f"{x * 100:.1f}%"
 
@@ -75,7 +93,10 @@ def counter_views(picks: list[Matchup], dd: DDragon) -> list[dict]:
 # --- Champ select ------------------------------------------------------------
 
 def champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon,
-                      pool: set[int] | None = None, min_matches: int = 100) -> dict:
+                      pool: set[int] | None = None, min_matches: int = 100, mode: dict | None = None) -> dict:
+    mode = mode or game_mode()
+    if mode["kind"] != "sr":
+        return _no_lanes_champ_select_view(state, ugg, dd, mode)
     my_role = state.my_role or (ugg.main_role(state.my_champion) if state.my_champion else None)
     enemy_roles = ugg.assign_roles(state.enemies) if state.enemies else {}
     role_of = {cid: role for role, cid in enemy_roles.items()}
@@ -95,6 +116,7 @@ def champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon,
         "matchup": None,
         "build": None,
         "errors": [],
+        "mode": mode,
     }
 
     if lane_enemy:
@@ -114,6 +136,55 @@ def champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon,
                     view["matchup"] = {"winRate": rate(m.wins, m.matches), "games": m.matches}
         except LookupError as e:
             view["errors"].append(str(e))
+    return view
+
+
+def aram_options(champions: list[tuple[int, str]], ugg: UGG, dd: DDragon) -> list[dict]:
+    """ARAM win rates for the champions you could end up on, best first. `champions` is (id, source)."""
+    out, seen = [], set()
+    for cid, source in champions:
+        if not cid or cid in seen:
+            continue
+        seen.add(cid)
+        try:
+            b = ugg.aram_build(cid)
+        except LookupError:
+            continue
+        out.append({**champ_ref(cid, dd), "source": source, "winRate": rate(b.wins, b.matches), "games": b.matches})
+    out.sort(key=lambda o: o["winRate"] or 0, reverse=True)
+    return out
+
+
+def _no_lanes_champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon, mode: dict) -> dict:
+    # ARAM and the other modes have no lanes, so no lane opponent or counters.
+    view = {
+        "myRole": None,
+        "me": champ_ref(state.my_champion, dd),
+        "locked": state.my_locked,
+        "laneOpponent": None,
+        "team": [{**(champ_ref(p["champion"], dd) or {}), "role": None, "locked": p["locked"], "me": p["me"]}
+                 for p in state.my_team],
+        "enemies": [champ_ref(c, dd) for c in state.enemies],
+        "bans": [champ_ref(b, dd) for b in state.bans],
+        "bench": [champ_ref(c, dd) for c in state.bench],
+        "timer": {"phase": state.timer_phase, "endsAt": int(time.time() * 1000) + state.time_left_ms},
+        "counters": [],
+        "matchup": None,
+        "build": None,
+        "aramOptions": [],
+        "errors": [],
+        "mode": mode,
+    }
+    if mode["kind"] != "aram":
+        view["errors"].append(f"U.gg has no builds for {mode['label']}.")
+        return view
+    if state.my_champion:
+        try:
+            view["build"] = build_view(ugg.aram_build(state.my_champion), dd)
+        except LookupError as e:
+            view["errors"].append(str(e))
+    team = [(p["champion"], "you" if p["me"] else "teammate") for p in state.my_team]
+    view["aramOptions"] = aram_options(sorted(team, key=lambda t: t[1] != "you") + [(c, "bench") for c in state.bench], ugg, dd)
     return view
 
 
@@ -154,7 +225,8 @@ def _objectives(events: list[dict], team_of: dict[str, str]) -> dict[str, dict[s
     return out
 
 
-def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | None = None) -> dict:
+def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | None = None,
+              mode: dict | None = None) -> dict:
     active = game.get("activePlayer", {})
     my_names = _player_names(active)
     players = game.get("allPlayers", [])
@@ -182,8 +254,9 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
 
     allies = [v for v in views if v["ally"]]
     enemies = [v for v in views if not v["ally"]]
-    # Ranked games report positions; other modes may not, so guess from U.gg.
-    if ugg and enemies and not any(e["role"] for e in enemies) and len(enemies) == 5:
+    mode = mode or game_mode(live=game)
+    # Ranked games report positions; other Summoner's Rift games may not, so guess from U.gg.
+    if mode["kind"] == "sr" and ugg and enemies and not any(e["role"] for e in enemies) and len(enemies) == 5:
         try:
             guess = ugg.assign_roles([e["id"] for e in enemies if e.get("id")])
             role_of = {cid: r for r, cid in guess.items()}
@@ -192,7 +265,9 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         except LookupError:
             pass
     me = next((v for v in views if v["me"]), None)
-    lane = next((e for e in enemies if me and me["role"] and e["role"] == me["role"]), None)
+    lane = None
+    if mode["kind"] == "sr":
+        lane = next((e for e in enemies if me and me["role"] and e["role"] == me["role"]), None)
 
     objectives = _objectives((game.get("events") or {}).get("Events", []), team_of)
     enemy_team = "CHAOS" if my_team == "ORDER" else "ORDER"
@@ -211,7 +286,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
 
     return {
         "gameTime": game.get("gameData", {}).get("gameTime", 0),
-        "mode": game.get("gameData", {}).get("gameMode"),
+        "mode": mode,
         "me": me,
         "gold": round(active.get("currentGold", 0)),
         "laneOpponent": lane,

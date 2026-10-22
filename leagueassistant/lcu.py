@@ -87,6 +87,11 @@ class LCU:
         """None, Lobby, Matchmaking, ReadyCheck, ChampSelect, InProgress, EndOfGame, ..."""
         return self.get("/lol-gameflow/v1/gameflow-phase") or "None"
 
+    def queue(self) -> dict | None:
+        """The current lobby or game's queue: id, gameMode (CLASSIC, ARAM, CHERRY, ...) and mapId."""
+        q = ((self.get("/lol-gameflow/v1/session") or {}).get("gameData") or {}).get("queue") or {}
+        return {k: q.get(k) for k in ("id", "gameMode", "mapId", "description")} if q else None
+
     def champ_select(self) -> dict | None:
         return self.get("/lol-champ-select/v1/session")
 
@@ -129,6 +134,8 @@ class ChampSelectState:
     my_locked: bool = False
     timer_phase: str = ""  # BAN_PICK, FINALIZATION, ...
     time_left_ms: int = 0
+    bench: list[int] = field(default_factory=list)  # ARAM champions anyone on the team can swap for
+    bench_enabled: bool = False
 
 
 def parse_champ_select(session: dict) -> ChampSelectState:
@@ -156,10 +163,14 @@ def parse_champ_select(session: dict) -> ChampSelectState:
     bans_info = session.get("bans") or {}
     bans = [b for b in bans_info.get("myTeamBans", []) + bans_info.get("theirTeamBans", []) if b]
     timer = session.get("timer") or {}
+    bench = [b.get("championId") if isinstance(b, dict) else b
+             for b in session.get("benchChampions") or session.get("benchChampionIds") or []]
     return ChampSelectState(
         my_champion, my_role, allies, enemies, bans,
         my_team=team,
         my_locked=me in locked_cells,
         timer_phase=timer.get("phase", ""),
         time_left_ms=int(timer.get("adjustedTimeLeftInPhase", 0)),
+        bench=[b for b in bench if b],
+        bench_enabled=bool(session.get("benchEnabled")),
     )

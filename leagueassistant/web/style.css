@@ -168,6 +168,23 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .counter .games { font-size: 11px; color: var(--muted); }
 .counter .tag { margin-left: auto; font-family: var(--display); color: var(--gold); letter-spacing: .08em; text-transform: uppercase; font-size: 12px; }
 
+/* ARAM champ select */
+.versus.aram { grid-template-columns: 1fr; }
+.versus.aram .vs-side { min-height: 150px; }
+.aram-opt { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px; border-radius: 8px; }
+.aram-opt + .aram-opt { margin-top: 4px; }
+.aram-opt.you { background: rgba(200,170,110,.08); outline: 1px solid var(--line-gold); }
+.aram-opt .cname { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.aram-opt .src { font-family: var(--display); font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-left: 4px; }
+.aram-opt.bench .src { color: var(--teal); }
+.aram-opt .track { height: 5px; border-radius: 3px; background: var(--bg-2); overflow: hidden; margin-top: 5px; }
+.aram-opt .fillbar { height: 100%; background: linear-gradient(90deg, var(--teal), var(--gold)); }
+.aram-opt .wrcol { display: flex; flex-direction: column; align-items: flex-end; }
+.aram-opt .games { font-size: 11px; color: var(--muted); }
+.swap-tip { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--teal); background: linear-gradient(110deg, rgba(10,200,185,.14), transparent 70%); }
+.swap-tip .n { font-family: var(--display); font-size: 22px; text-transform: uppercase; }
+.bench { display: flex; gap: 6px; flex-wrap: wrap; }
+
 /* Build */
 .build { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
 .build-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }

@@ -19,6 +19,8 @@ jobs:
           python-version: "3.12"
       - run: pip install -e ".[server,dev]"
       - run: pytest -q
+      - name: Check the dashboard script parses
+        run: node --check leagueassistant/web/app.js
 
   build:
     needs: test

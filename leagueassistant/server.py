@@ -71,6 +71,7 @@ class Hub:
             "champSelect": None,
             "live": None,
             "postGame": None,
+            "mode": None,
             "history": [],
             "stats": {"region": stats.region, "rank": stats.rank, "patch": None},
             "updatedAt": 0,
@@ -91,18 +92,20 @@ class Hub:
             s["history"] = [advisor.lcu_match_view(g, dd) for g in snap["history"]]
 
         session = snap.get("champSelect")
+        live = snap.get("live")
+        mode = advisor.game_mode(snap.get("queue"), live, session)
+        s["mode"] = mode if s["phase"] in ("ChampSelect", "GameStart", "InProgress", "Reconnect") or live else None
         if session:
             state = lcu.parse_champ_select(session)
             key = (state.my_champion, state.my_role, state.my_locked, tuple(state.enemies),
                    tuple(sorted(state.allies.items())), tuple(state.bans),
-                   tuple((p["champion"], p["locked"]) for p in state.my_team))
+                   tuple((p["champion"], p["locked"]) for p in state.my_team), tuple(state.bench), mode["gameMode"])
             if key != self.select_key:
                 pool = set(snap.get("pickable") or []) or None
-                s["champSelect"] = advisor.champ_select_view(state, ugg, dd, pool=pool, min_matches=self.min_games)
+                s["champSelect"] = advisor.champ_select_view(state, ugg, dd, pool=pool, min_matches=self.min_games,
+                                                             mode=mode)
                 self.select_key = key
-                build = s["champSelect"].get("build")
-                if build:
-                    self.my_build = build
+                self.my_build = s["champSelect"].get("build")
             elif s["champSelect"]:
                 # Only the timer changed.
                 s["champSelect"]["timer"] = {"phase": state.timer_phase,
@@ -117,22 +120,26 @@ class Hub:
         elif s["phase"] == "ChampSelect":
             s["postGame"] = None
 
-        live = snap.get("live")
         if live:
-            s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg))
+            s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg, mode), mode=mode)
         elif s["phase"] != "InProgress":
             s["live"] = None
         s["updatedAt"] = int(time.time() * 1000)
 
-    def _build_for_live(self, game: dict, dd: DDragon, ugg: UGG) -> dict | None:
+    def _build_for_live(self, game: dict, dd: DDragon, ugg: UGG, mode: dict) -> dict | None:
         # Reuse the champ select build; look it up fresh if the agent started mid-game.
-        me = advisor.live_view(game, dd).get("me")
+        if mode["kind"] == "other":
+            return None
+        me = advisor.live_view(game, dd, mode=mode).get("me")
         if not me or not me.get("id"):
             return self.my_build
-        if self.my_build and self.my_build["champion"]["id"] == me["id"]:
-            return self.my_build
+        aram = mode["kind"] == "aram"
+        b = self.my_build
+        if b and b["champion"]["id"] == me["id"] and (b["role"] == "aram") == aram:
+            return b
         try:
-            self.my_build = advisor.build_view(ugg.build(me["id"], me.get("role")), dd)
+            build = ugg.aram_build(me["id"]) if aram else ugg.build(me["id"], me.get("role"))
+            self.my_build = advisor.build_view(build, dd)
         except LookupError:
             self.my_build = None
         return self.my_build
@@ -209,6 +216,8 @@ def create_app() -> FastAPI:
         dd, ugg = stats.get()
         try:
             cid = dd.champion_id(champion)
+            if role == "aram":
+                return dd, ugg, cid, role
             role = normalize_role(role) if role else ugg.main_role(cid)
         except (KeyError, ValueError) as e:
             raise HTTPException(404, str(e))
@@ -218,13 +227,15 @@ def create_app() -> FastAPI:
     def build(champion: str, role: str | None = None):
         dd, ugg, cid, role = lookup(champion, role)
         try:
-            return advisor.build_view(ugg.build(cid, role), dd)
+            return advisor.build_view(ugg.aram_build(cid) if role == "aram" else ugg.build(cid, role), dd)
         except LookupError as e:
             raise HTTPException(404, str(e))
 
     @app.get("/api/counters/{champion}")
     def counters(champion: str, role: str | None = None, limit: int = 8):
         dd, ugg, cid, role = lookup(champion, role)
+        if role == "aram":
+            return {"champion": advisor.champ_ref(cid, dd), "role": role, "counters": []}
         picks = ugg.counters(cid, role, min_matches=hub.min_games, limit=limit)
         return {"champion": advisor.champ_ref(cid, dd), "role": role, "counters": advisor.counter_views(picks, dd)}
 

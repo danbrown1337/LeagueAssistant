@@ -15,6 +15,26 @@ class FakeDDragon:
     def champion_icon(self, cid):
         return None
 
+    runes, spells = {}, {}
+
+    def rune_icon(self, rid):
+        return None
+
+    def runes_in_tree(self, runes, tree):
+        return []
+
+    def item_name(self, iid):
+        return f"Item{iid}"
+
+    def item_icon(self, iid):
+        return None
+
+    def spell_icon(self, sid):
+        return None
+
+    def item_cost(self, iid):
+        return 0
+
 
 def make_client(monkeypatch, token="secret"):
     monkeypatch.setenv("AGENT_TOKEN", token)
@@ -88,3 +108,57 @@ def test_post_game_shows_ranks_until_next_champ_select(monkeypatch):
     assert client.get("/api/state").json()["postGame"] is not None
     client.post("/api/agent", json={"clientConnected": True, "phase": "ChampSelect"}, headers=auth)
     assert client.get("/api/state").json()["postGame"] is None
+
+
+AUTH = {"Authorization": "Bearer secret"}
+ARAM_QUEUE = {"id": 450, "gameMode": "ARAM", "mapId": 12}
+
+
+def test_aram_champ_select_ranks_bench_and_skips_lanes(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    snap = {
+        "clientConnected": True, "phase": "ChampSelect", "queue": ARAM_QUEUE,
+        "champSelect": {
+            "localPlayerCellId": 0, "benchEnabled": True,
+            "myTeam": [{"cellId": 0, "championId": AHRI}, {"cellId": 1, "championId": YASUO}],
+            "theirTeam": [], "benchChampions": [{"championId": JINX}],
+        },
+    }
+    client.post("/api/agent", json=snap, headers=AUTH)
+    state = client.get("/api/state").json()
+    assert state["mode"]["label"] == "ARAM"
+    cs = state["champSelect"]
+    assert cs["mode"]["kind"] == "aram" and cs["laneOpponent"] is None and cs["counters"] == []
+    assert cs["build"]["role"] == "aram" and cs["build"]["winRate"] == 0.52
+    assert [(o["id"], o["source"]) for o in cs["aramOptions"]] == [(JINX, "bench"), (AHRI, "you"), (YASUO, "teammate")]
+
+
+def live_player(champ, team, me=False):
+    name = "Me" if me else f"P{champ}"
+    return {"championName": f"Champ{champ}", "rawChampionName": f"game_character_displayname_Champ{champ}",
+            "riotId": f"{name}#1", "riotIdGameName": name, "team": team, "position": "", "scores": {}, "items": []}
+
+
+def test_aram_game_uses_aram_build_and_no_lanes(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    enemies = [YASUO, LEE, THRESH, JINX, DARIUS]
+    live = {
+        "activePlayer": {"riotId": "Me#1", "riotIdGameName": "Me"},
+        "allPlayers": [live_player(AHRI, "ORDER", me=True)] + [live_player(c, "CHAOS") for c in enemies],
+        "gameData": {"gameMode": "ARAM", "gameTime": 300},
+    }
+    client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress", "live": live}, headers=AUTH)
+    g = client.get("/api/state").json()["live"]
+    assert g["mode"]["kind"] == "aram"
+    assert g["laneOpponent"] is None
+    assert all(e["role"] is None for e in g["enemies"])  # no Summoner's Rift lane guesses
+    assert g["build"]["role"] == "aram"
+
+
+def test_modes_without_ugg_data_show_no_build(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    snap = {"clientConnected": True, "phase": "ChampSelect", "queue": {"id": 1700, "gameMode": "CHERRY"},
+            "champSelect": {"localPlayerCellId": 0, "myTeam": [{"cellId": 0, "championId": AHRI}], "theirTeam": []}}
+    client.post("/api/agent", json=snap, headers=AUTH)
+    cs = client.get("/api/state").json()["champSelect"]
+    assert cs["build"] is None and cs["errors"] == ["U.gg has no builds for Arena."]
