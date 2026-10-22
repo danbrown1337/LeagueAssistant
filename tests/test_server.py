@@ -35,6 +35,15 @@ class FakeDDragon:
     def item_cost(self, iid):
         return 0
 
+    def item(self, iid):
+        return {}
+
+    def all_items(self):
+        return {}
+
+    def champion(self, cid):
+        return {}
+
 
 def make_client(monkeypatch, token="secret"):
     monkeypatch.setenv("AGENT_TOKEN", token)
