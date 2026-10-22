@@ -246,7 +246,9 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     async def healthz():
-        return {"ok": True}
+        from .updater import current_build
+
+        return {"ok": True, "build": current_build()}
 
     @app.get("/")
     async def index():

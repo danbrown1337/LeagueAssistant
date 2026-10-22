@@ -87,7 +87,15 @@ def cmd_local(args):
 
     import uvicorn
 
+    from . import updater
     from .agent import Agent
+
+    just_updated = bool(os.environ.pop(updater.JUST_UPDATED, None))
+    auto_update = args.update and updater.enabled()
+    if auto_update:
+        updater.cleanup()
+        if not just_updated:
+            updater.update(sys.argv[1:])  # restarts into the new version if there is one
 
     # Only this process talks to its own server, so a fresh token each run is enough.
     token = secrets.token_hex(16)
@@ -97,23 +105,35 @@ def cmd_local(args):
     os.environ.setdefault("MIN_GAMES", str(args.min_games))
     from .server import create_app
 
-    server = uvicorn.Server(uvicorn.Config(create_app(), host=args.host, port=args.port, log_level="warning"))
+    app = create_app()
+    server = uvicorn.Server(uvicorn.Config(app, host=args.host, port=args.port, log_level="warning"))
     url = f"http://127.0.0.1:{args.port}"
+
+    def keep_updated():
+        # Only between games, so an update never interrupts champ select or a game.
+        while True:
+            time.sleep(updater.CHECK_EVERY)
+            state = app.state.hub.state
+            if state["phase"] in ("None", "Lobby", "EndOfGame") and not state["live"]:
+                updater.update(sys.argv[1:])
 
     def run_agent():
         while not server.started:
             if server.should_exit:
                 return
             time.sleep(0.2)
-        print(f"\nLeagueAssistant is running. Dashboard: {url}")
+        build = updater.current_build()
+        print(f"\nLeagueAssistant{f' (build {build[:7]})' if build else ''} is running. Dashboard: {url}")
         if args.host in ("127.0.0.1", "localhost"):
             print(f"To open it on your phone over Tailscale, run this once:  tailscale serve --bg {args.port}")
         print("Leave this window open. Close it or press Ctrl+C to stop.\n")
-        if args.open:
+        if args.open and not just_updated:
             webbrowser.open(url)
         Agent(url, token=token, lockfile=args.lockfile, interval=args.interval).run()
 
     threading.Thread(target=run_agent, daemon=True).start()
+    if auto_update:
+        threading.Thread(target=keep_updated, daemon=True).start()
     try:
         server.run()
     except SystemExit:
@@ -150,6 +170,8 @@ def main(argv=None):
     lo.add_argument("--port", type=int, default=8080)
     lo.add_argument("--interval", type=float, default=2.0, help="Seconds between updates")
     lo.add_argument("--no-browser", dest="open", action="store_false", help="Don't open the dashboard on start")
+    lo.add_argument("--no-update", dest="update", action="store_false",
+                    help="Don't install new versions from GitHub automatically (the .exe only)")
     lo.set_defaults(func=cmd_local)
 
     b = sub.add_parser("build", help="Show the U.gg build for a champion")
