@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from pathlib import Path
 
@@ -56,6 +57,16 @@ class FakeUGG(UGG):
     def role_matches(self, champion_id):
         return self.ROLE_GAMES[champion_id]
 
+    # ARAM (wins, games) per champion.
+    ARAM = {AHRI: (520, 1000), YASUO: (450, 1000), JINX: (560, 1000)}
+
+    def aram_build(self, champion_id):
+        if champion_id not in self.ARAM:
+            raise LookupError(f"No ARAM build data for champion {champion_id}")
+        b = parse_build(champion_id, "aram", json.loads((HERE / "ahri_mid_overview.json").read_text()))
+        wins, games = self.ARAM[champion_id]
+        return dataclasses.replace(b, wins=wins, matches=games)
+
     def matchups(self, champion_id, role=None):
         # Yasuo's results in mid: loses a lot to Ahri, Thresh mid is off-role.
         return [Matchup(AHRI, 400, 1000), Matchup(DARIUS, 40, 100), Matchup(THRESH, 100, 300)]
@@ -113,3 +124,19 @@ def test_average_rank_ignores_unranked():
     avg = advisor.average_rank([gold, plat, None])
     assert (avg["label"], avg["ranked"], avg["players"]) == ("Gold II", 2, 3)
     assert advisor.average_rank([None]) is None
+
+
+def test_game_mode():
+    assert advisor.game_mode()["kind"] == "sr"
+    assert advisor.game_mode(live={"gameData": {"gameMode": "ARAM"}})["kind"] == "aram"
+    aram = advisor.game_mode({"id": 450, "gameMode": "ARAM"})
+    assert (aram["kind"], aram["label"]) == ("aram", "ARAM")
+    arena = advisor.game_mode({"id": 9999, "gameMode": "CHERRY"})
+    assert (arena["kind"], arena["label"]) == ("other", "Arena")
+    assert advisor.game_mode(session={"benchEnabled": True})["kind"] == "aram"
+    assert advisor.game_mode({"id": 420, "gameMode": "CLASSIC"})["label"] == "Ranked Solo/Duo"
+
+
+def test_parse_champ_select_bench():
+    s = lcu.parse_champ_select({"benchEnabled": True, "benchChampions": [{"championId": JINX}, {"championId": 0}]})
+    assert s.bench == [JINX] and s.bench_enabled

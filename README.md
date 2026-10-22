@@ -13,6 +13,11 @@ on a phone, tablet or second monitor. It follows your game:
   average rank of your team, the enemy team and the whole lobby. This shows
   roughly what level you're playing at.
 - **Between games:** recent match history and a champion lookup.
+- **ARAM:** uses U.gg's ARAM builds instead of Summoner's Rift ones, drops
+  lanes and counters, and ranks your champion, your teammates' and the bench
+  by ARAM win rate so you know what to grab or trade for. For modes U.gg has
+  no data for (Arena, URF and others) it says so and shows only the
+  scoreboard.
 
 ## Run it on the gaming PC (Windows)
 
