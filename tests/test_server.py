@@ -1,3 +1,5 @@
+import json
+
 from fastapi.testclient import TestClient
 
 from leagueassistant import server
@@ -45,8 +47,12 @@ class FakeDDragon:
         return {}
 
 
-def make_client(monkeypatch, token="secret"):
+def make_client(monkeypatch, token="secret", data_dir=None):
     monkeypatch.setenv("AGENT_TOKEN", token)
+    if data_dir:
+        monkeypatch.setenv("LEAGUEASSISTANT_DATA", str(data_dir))
+    else:
+        monkeypatch.setenv("LEAGUEASSISTANT_LOG", "0")
     app = server.create_app()
     hub = app.state.hub
     monkeypatch.setattr(hub.stats, "get", lambda: (FakeDDragon(), FakeUGG("16.19")))
@@ -171,3 +177,12 @@ def test_modes_without_ugg_data_show_no_build(monkeypatch):
     client.post("/api/agent", json=snap, headers=AUTH)
     cs = client.get("/api/state").json()["champSelect"]
     assert cs["build"] is None and cs["errors"] == ["U.gg has no builds for Arena."]
+
+
+def test_finished_games_are_saved(monkeypatch, tmp_path):
+    client, _ = make_client(monkeypatch, data_dir=tmp_path)
+    client.post("/api/agent", json=eog_snapshot(), headers=AUTH)
+    client.post("/api/agent", json=eog_snapshot(), headers=AUTH)
+    [line] = (tmp_path / "games.jsonl").read_text().splitlines()
+    rec = json.loads(line)
+    assert rec["gameId"] == 42 and rec["win"] and rec["lobbyAverage"]["ranked"] == 3

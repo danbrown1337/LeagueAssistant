@@ -7,6 +7,8 @@ environment variables:
     UGG_REGION    U.gg stats region (default world)
     UGG_RANK      U.gg rank filter (default emerald_plus)
     MIN_GAMES     ignore matchups with fewer games (default 100)
+    LEAGUEASSISTANT_LOG   set to 0 to stop saving finished games to games.jsonl
+    LEAGUEASSISTANT_DATA  folder for games.jsonl (default: your local app data folder)
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import advisor, lcu
+from .gamelog import GameLog
 from .ddragon import DDragon
 from .ugg import UGG, normalize_role
 
@@ -54,8 +57,10 @@ class Stats:
 
 
 class Hub:
-    def __init__(self, stats: Stats, token: str | None, min_games: int):
+    def __init__(self, stats: Stats, token: str | None, min_games: int, gamelog: GameLog | None = None):
         self.stats = stats
+        self.gamelog = gamelog
+        self.prev_phase = "None"
         self.token = token
         self.min_games = min_games
         self.lock = asyncio.Lock()
@@ -124,7 +129,26 @@ class Hub:
             s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg, mode), mode=mode)
         elif s["phase"] != "InProgress":
             s["live"] = None
+        if self.gamelog:
+            self._log(snap, mode, dd)
+        self.prev_phase = s["phase"]
         s["updatedAt"] = int(time.time() * 1000)
+
+    def _log(self, snap: dict, mode: dict, dd: DDragon):
+        s, gl = self.state, self.gamelog
+        queue = snap.get("queue") or {}
+        mode = mode if queue or snap.get("live") else None
+        try:
+            if snap.get("live") and s["live"]:
+                gl.live(s["live"], queue.get("gameId"), dd)
+            post = snap.get("postGame")
+            if post and post.get("game") and s["postGame"]:
+                gl.post_game(post["game"], s["postGame"], mode, dd)
+            ended = ("PreEndOfGame", "EndOfGame")
+            if self.prev_phase in ended and s["phase"] not in ended and gl.current and snap.get("history"):
+                gl.history(snap["history"][0], s["history"][0] if s["history"] else None, mode, dd)
+        except Exception:
+            log.exception("Couldn't record the game")  # never break the dashboard over logging
 
     def _build_for_live(self, game: dict, dd: DDragon, ugg: UGG, mode: dict) -> dict | None:
         # Reuse the champ select build; look it up fresh if the agent started mid-game.
@@ -183,7 +207,10 @@ class Hub:
 
 def create_app() -> FastAPI:
     stats = Stats(os.environ.get("UGG_REGION", "world"), os.environ.get("UGG_RANK", "emerald_plus"))
-    hub = Hub(stats, os.environ.get("AGENT_TOKEN") or None, int(os.environ.get("MIN_GAMES", "100")))
+    from .updater import current_build
+
+    gamelog = GameLog(build=current_build()) if os.environ.get("LEAGUEASSISTANT_LOG", "1") != "0" else None
+    hub = Hub(stats, os.environ.get("AGENT_TOKEN") or None, int(os.environ.get("MIN_GAMES", "100")), gamelog)
 
     @asynccontextmanager
     async def lifespan(app):

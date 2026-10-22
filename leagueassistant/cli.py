@@ -103,6 +103,8 @@ def cmd_local(args):
     os.environ.setdefault("UGG_REGION", args.region)
     os.environ.setdefault("UGG_RANK", args.rank)
     os.environ.setdefault("MIN_GAMES", str(args.min_games))
+    if not args.log:
+        os.environ["LEAGUEASSISTANT_LOG"] = "0"
     from .server import create_app
 
     app = create_app()
@@ -126,6 +128,8 @@ def cmd_local(args):
         print(f"\nLeagueAssistant{f' (build {build[:7]})' if build else ''} is running. Dashboard: {url}")
         if args.host in ("127.0.0.1", "localhost"):
             print(f"To open it on your phone over Tailscale, run this once:  tailscale serve --bg {args.port}")
+        if app.state.hub.gamelog:
+            print(f"Finished games are saved to {app.state.hub.gamelog.path}")
         print("Leave this window open. Close it or press Ctrl+C to stop.\n")
         if args.open and not just_updated:
             webbrowser.open(url)
@@ -170,6 +174,7 @@ def main(argv=None):
     lo.add_argument("--port", type=int, default=8080)
     lo.add_argument("--interval", type=float, default=2.0, help="Seconds between updates")
     lo.add_argument("--no-browser", dest="open", action="store_false", help="Don't open the dashboard on start")
+    lo.add_argument("--no-log", dest="log", action="store_false", help="Don't save finished games to games.jsonl")
     lo.add_argument("--no-update", dest="update", action="store_false",
                     help="Don't install new versions from GitHub automatically (the .exe only)")
     lo.set_defaults(func=cmd_local)
