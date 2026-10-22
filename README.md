@@ -30,6 +30,15 @@ on a phone, tablet or second monitor. It follows your game:
 The first time you run it, Windows may say "Windows protected your PC" because
 the .exe isn't code-signed. Click **More info**, then **Run anyway**.
 
+### Updates
+
+The .exe updates itself. When it starts, and every 6 hours between games, it
+checks the latest release. If there's a newer build, it downloads it, checks
+it against the release's checksum, replaces itself and restarts in a new
+window. That takes a few seconds and never happens during champ select or a
+game. Keep the .exe in a folder you can write to (Downloads or Documents is
+fine; Program Files isn't). Add `--no-update` to turn this off.
+
 ### Open it on your phone over Tailscale
 
 With Tailscale installed on the PC, run this once in a terminal:
@@ -60,6 +69,7 @@ Add these to the shortcut's target or the command line:
 | `--port` | `8080` | `--port 8081` if 8080 is taken |
 | `--lockfile` | found automatically | `--lockfile "D:\Riot Games\League of Legends\lockfile"` |
 | `--no-browser` | opens the browser | |
+| `--no-update` | updates itself | |
 
 The app only reads data from the League client and the in-game API. It never
 sends input to the game.

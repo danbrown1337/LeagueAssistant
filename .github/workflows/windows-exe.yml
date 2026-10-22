@@ -31,12 +31,18 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install ".[server]" pyinstaller
+      - name: Stamp the build with its commit (used by auto-update)
+        shell: bash
+        run: echo "COMMIT = \"$GITHUB_SHA\"" > leagueassistant/_build.py
       - run: pyinstaller --noconfirm packaging/leagueassistant.spec
+      - name: Write build.txt
+        shell: bash
+        run: echo "$GITHUB_SHA $(sha256sum dist/leagueassistant.exe | cut -d' ' -f1)" > dist/build.txt
 
       - name: Smoke test the exe
         shell: pwsh
         run: |
-          $p = Start-Process dist\leagueassistant.exe -ArgumentList "--no-browser" -PassThru -NoNewWindow
+          $p = Start-Process dist\leagueassistant.exe -ArgumentList "--no-browser","--no-update" -PassThru -NoNewWindow
           $ok = $false
           for ($i = 0; $i -lt 60; $i++) {
             try { Invoke-WebRequest http://127.0.0.1:8080/healthz -UseBasicParsing | Out-Null; $ok = $true; break }
@@ -53,10 +59,38 @@ jobs:
           Stop-Process -Id $p.Id -Force
           if (-not $ok) { exit 1 }
 
+      - name: Test auto-update against a fake release
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash dist\leagueassistant.exe -Algorithm SHA256).Hash.ToLower()
+          New-Item -ItemType Directory upd, rel | Out-Null
+          Copy-Item dist\leagueassistant.exe upd\
+          Copy-Item dist\leagueassistant.exe rel\
+          "fake-newer-commit $hash" | Set-Content rel\build.txt -Encoding ascii
+          $web = Start-Process python -ArgumentList "-m","http.server","8099","--directory","rel" -PassThru -NoNewWindow
+          Start-Sleep -Seconds 2
+          $env:LEAGUEASSISTANT_UPDATE_URL = "http://127.0.0.1:8099/"
+          $p = Start-Process upd\leagueassistant.exe -ArgumentList "--no-browser","--port","8081" -PassThru
+          $ok = $false
+          for ($i = 0; $i -lt 120; $i++) {
+            try { Invoke-WebRequest http://127.0.0.1:8081/healthz -UseBasicParsing | Out-Null; $ok = $true; break }
+            catch { Start-Sleep -Seconds 1 }
+          }
+          Start-Sleep -Seconds 2
+          # The first process should have swapped in the download and handed over to a new one.
+          $restarted = $p.HasExited
+          Write-Host "server up: $ok, original process exited: $restarted"
+          Get-ChildItem upd | Format-Table Name, Length
+          Get-Process leagueassistant -ErrorAction SilentlyContinue | Stop-Process -Force
+          Stop-Process -Id $web.Id -Force
+          if (-not ($ok -and $restarted)) { exit 1 }
+
       - uses: actions/upload-artifact@v4
         with:
           name: leagueassistant-windows
-          path: dist/leagueassistant.exe
+          path: |
+            dist/leagueassistant.exe
+            dist/build.txt
 
       - name: Publish as the latest release
         if: github.ref == 'refs/heads/main'
@@ -66,4 +100,4 @@ jobs:
         run: |
           notes="Built from ${GITHUB_SHA::7}. Download leagueassistant.exe and double-click it."
           gh release delete latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create latest dist/leagueassistant.exe --title "Latest build" --notes "$notes" --target "$GITHUB_SHA" --latest
+          gh release create latest dist/leagueassistant.exe dist/build.txt --title "Latest build" --notes "$notes" --target "$GITHUB_SHA" --latest
