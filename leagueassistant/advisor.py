@@ -311,6 +311,7 @@ def lcu_match_view(game: dict, dd: DDragon) -> dict:
     p = game["participants"][0]
     s = p["stats"]
     return {
+        "gameId": game.get("gameId"),
         "champion": champ_ref(p["championId"], dd),
         "win": bool(s.get("win")),
         "kills": s.get("kills", 0), "deaths": s.get("deaths", 0), "assists": s.get("assists", 0),

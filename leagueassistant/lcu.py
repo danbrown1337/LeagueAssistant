@@ -88,9 +88,12 @@ class LCU:
         return self.get("/lol-gameflow/v1/gameflow-phase") or "None"
 
     def queue(self) -> dict | None:
-        """The current lobby or game's queue: id, gameMode (CLASSIC, ARAM, CHERRY, ...) and mapId."""
-        q = ((self.get("/lol-gameflow/v1/session") or {}).get("gameData") or {}).get("queue") or {}
-        return {k: q.get(k) for k in ("id", "gameMode", "mapId", "description")} if q else None
+        """The current lobby or game's queue: id, gameMode (CLASSIC, ARAM, CHERRY, ...), mapId and gameId."""
+        data = (self.get("/lol-gameflow/v1/session") or {}).get("gameData") or {}
+        q = data.get("queue") or {}
+        if not q:
+            return None
+        return {**{k: q.get(k) for k in ("id", "gameMode", "mapId", "description")}, "gameId": data.get("gameId") or None}
 
     def champ_select(self) -> dict | None:
         return self.get("/lol-champ-select/v1/session")

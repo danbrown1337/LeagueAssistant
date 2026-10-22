@@ -42,6 +42,16 @@ window. That takes a few seconds and never happens during champ select or a
 game. Keep the .exe in a folder you can write to (Downloads or Documents is
 fine; Program Files isn't). Add `--no-update` to turn this off.
 
+### Game log
+
+Every finished game is saved as one line of JSON in
+`%LOCALAPPDATA%\LeagueAssistant\games.jsonl` (the console shows the exact
+path when it starts). Each record has the mode, champion, result, K/D/A, CS,
+duration, final items, every player's rank with the team and lobby averages,
+each change in the build advice (time, item, reason, threats), and every item
+you bought with whether it matched the advice at the time. Nothing leaves the
+PC. Add `--no-log` to turn it off.
+
 ### Open it on your phone over Tailscale
 
 With Tailscale installed on the PC, run this once in a terminal:
@@ -73,6 +83,7 @@ Add these to the shortcut's target or the command line:
 | `--lockfile` | found automatically | `--lockfile "D:\Riot Games\League of Legends\lockfile"` |
 | `--no-browser` | opens the browser | |
 | `--no-update` | updates itself | |
+| `--no-log` | saves finished games | |
 
 The app only reads data from the League client and the in-game API. It never
 sends input to the game.
