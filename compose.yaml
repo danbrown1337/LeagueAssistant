@@ -1,0 +1,13 @@
+services:
+  leagueassistant:
+    build: .
+    image: leagueassistant:latest
+    container_name: leagueassistant
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Shared secret the agent on your gaming PC must send. Set it in a .env file next to this one.
+      AGENT_TOKEN: ${AGENT_TOKEN:?Set AGENT_TOKEN in .env}
+      UGG_REGION: ${UGG_REGION:-world}
+      UGG_RANK: ${UGG_RANK:-emerald_plus}

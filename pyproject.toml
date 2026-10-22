@@ -1,0 +1,23 @@
+[project]
+name = "leagueassistant"
+version = "0.1.0"
+description = "Champ select and in-game helper for League of Legends using U.gg stats and the local League client"
+requires-python = ">=3.10"
+dependencies = ["requests>=2.31", "psutil>=5.9"]
+
+[project.optional-dependencies]
+server = ["fastapi>=0.110", "uvicorn>=0.29"]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[project.scripts]
+leagueassistant = "leagueassistant.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["leagueassistant"]
+
+[tool.setuptools.package-data]
+leagueassistant = ["web/*"]
