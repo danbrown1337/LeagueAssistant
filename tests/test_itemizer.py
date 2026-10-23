@@ -75,7 +75,8 @@ def test_core_comes_first_in_a_neutral_game():
 def test_heavy_healing_gets_anti_heal_for_your_style_and_jumps_the_core():
     enemies = [enemy(2), enemy(3, [1]), enemy(4)]
     enemies[0]["name"] = "Soraka"
-    a = itemizer.advise({"id": 1, "items": [{"id": 1}]}, enemies + [enemy(8)], AP_BUILD, DD, gold=900, game_time=900)
+    a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 2}]}, enemies + [enemy(8)], AP_BUILD, DD, gold=900,
+                        game_time=900)
     assert a["next"]["name"] == "Morello"
     assert "Soraka" in a["next"]["reason"] and "Vladimir" in a["next"]["reason"]
     # Can't afford it yet: buy the part you can.
@@ -90,7 +91,7 @@ def test_stacked_armor_gets_armor_pen_for_an_adc():
 
 
 def test_fed_physical_assassin_gets_armor_for_a_mage():
-    a = itemizer.advise({"id": 1, "items": [{"id": 1}]}, [enemy(6, [6], kills=9, deaths=1), enemy(7, [6]), enemy(5)],
+    a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 2}]}, [enemy(6, [6], kills=9, deaths=1), enemy(7, [6]), enemy(5)],
                         AP_BUILD, DD, game_time=1200)
     assert a["next"]["name"] == "Zhonya"
     assert "Zed is fed" in a["next"]["reason"]
@@ -108,3 +109,48 @@ def test_owning_an_item_for_a_threat_stops_suggesting_more():
     enemies = [enemy(2), enemy(3, [1]), enemy(4)]
     a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 3}]}, enemies, AP_BUILD, DD, game_time=900)
     assert "Morello" not in [p["name"] for p in [a["next"], *a["situational"]]]
+
+
+def test_urgent_picks_wait_until_you_have_boots():
+    enemies = [enemy(2), enemy(3, [1]), enemy(4), enemy(8)]
+    a = itemizer.advise({"id": 1, "items": [{"id": 1}]}, enemies, AP_BUILD, DD, game_time=900)
+    # Boots first (swapped to Mercury's here, since the enemy damage is mostly magic), anti-heal after.
+    assert "Boots" in ITEMS[a["next"]["id"]]["tags"]
+    assert "Morello" in [p["name"] for p in a["situational"]]
+
+
+def test_aram_build_gets_boots_from_the_rift_build_when_missing():
+    from leagueassistant import advisor
+    from leagueassistant.ugg import Build
+
+    def build(core):
+        return Build(1, "aram", 50, 100, (8100, 8200), [], [], [], [], core, [], [], "QWE")
+
+    class UGG:
+        def aram_build(self, cid):
+            return build([1, 15, 3])
+
+        def build(self, cid, role=None):
+            return build([1, 2, 15])
+
+    class DDWithRunes(FakeDD):
+        runes, spells = {}, {}
+
+        def rune_icon(self, r):
+            return None
+
+        def runes_in_tree(self, runes, tree):
+            return []
+
+        def spell_icon(self, s):
+            return None
+
+        def champion_name(self, cid):
+            return "Ahri"
+
+        def champion_icon(self, cid):
+            return None
+
+    v = advisor.aram_build_view(1, UGG(), DDWithRunes())
+    assert [i["name"] for i in v["core"]] == ["Ludens", "Sorcs", "Ludens Copy", "Morello"]
+    assert v["core"][1]["added"] and "Summoner's Rift" in v["bootsNote"]

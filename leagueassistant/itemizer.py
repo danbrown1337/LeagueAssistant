@@ -270,7 +270,9 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     have_core = len(build.get("core", [])) - len([i for i in build.get("core", []) if i["id"] not in owned])
     urgent = [p for p in situational if p["priority"] >= 3]
 
-    if urgent and (have_core >= 1 or game_time >= 15 * 60):
+    # Urgent picks can jump core legendaries, but never boots.
+    boots_next = bool(core) and "Boots" in dd.item(core[0]["id"]).get("tags", [])
+    if urgent and (have_core >= 1 or game_time >= 15 * 60) and not boots_next:
         nxt = urgent[0]
     elif core:
         c = core[0]
