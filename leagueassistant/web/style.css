@@ -266,6 +266,10 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .result-banner.loss .r { color: var(--red); text-shadow: 0 0 30px rgba(232,64,87,.5); }
 
 .pg { margin-bottom: 16px; }
+.mmr { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; padding: 12px; margin-bottom: 14px; border-radius: 8px; border: 1px solid var(--line-gold); background: linear-gradient(110deg, rgba(200,170,110,.12), transparent 70%); }
+.mmr-k { font-size: 12px; letter-spacing: .06em; }
+.mmr-v { font-family: var(--display); font-size: 28px; font-weight: 700; color: var(--gold-hi); line-height: 1.1; }
+.mmr-basis { font-size: 12px; flex: 1; min-width: 220px; }
 .pg-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .pg-avg { font-size: 13px; }
 .pg-avg b { color: var(--gold-hi); }

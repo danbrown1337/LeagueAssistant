@@ -21,6 +21,13 @@ log = logging.getLogger("leagueassistant.gamelog")
 
 RECORD_VERSION = 1
 MAX_TIMELINE = 400  # advice changes kept per game
+ESTIMATE_GAMES = 10  # games per queue in the rolling MMR estimate
+
+
+def mode_key(mode: dict | None):
+    """Games in the same queue share an MMR, so the estimate is per queue."""
+    mode = mode or {}
+    return mode.get("queueId") or mode.get("label") or "unknown"
 
 
 def data_dir() -> Path:
@@ -113,15 +120,19 @@ class GameLog:
         self.path = path or data_dir() / "games.jsonl"
         self.build = build
         self.current: Recording | None = None
+        self.last_mode: dict | None = None  # mode of the last saved game
         self.logged: set = set()
+        self.estimates: list[dict] = []  # per game: queue, lobby rank value, ranked players
         self.failed = False
         try:
             with open(self.path, encoding="utf-8") as f:
                 for line in f:
                     try:
-                        self.logged.add(json.loads(line).get("gameId"))
+                        rec = json.loads(line)
                     except ValueError:
-                        pass
+                        continue
+                    self.logged.add(rec.get("gameId"))
+                    self._add_estimate(rec)
         except FileNotFoundError:
             pass
         except OSError as e:
@@ -161,6 +172,7 @@ class GameLog:
             "items": [_item(i, dd) for i in items],
             "ranked": view.get("ranked"),
             "lobbyAverage": view.get("average"),
+            "mmrEstimate": view.get("lobbyEstimate"),
             "teams": [{"ally": t.get("ally"), "win": t.get("win"), "average": t.get("average"),
                        "players": [_player(p) for p in t.get("players", [])]} for t in teams],
         }, rec)
@@ -189,6 +201,41 @@ class GameLog:
             "ranked": None, "lobbyAverage": None, "teams": [],
         }, rec)
 
+    # --- MMR estimate ---
+
+    def _add_estimate(self, rec: dict):
+        est = rec.get("mmrEstimate") or rec.get("lobbyAverage")
+        if est and est.get("value") is not None and est.get("ranked"):
+            self.estimates.append({"key": mode_key(rec.get("mode")), "label": (rec.get("mode") or {}).get("label"),
+                                   "value": est["value"], "ranked": est["ranked"]})
+
+    def mmr_estimate(self, mode: dict | None) -> dict | None:
+        """Lobby rank over your last games in this queue, weighted by how many ranked players each had."""
+        from .advisor import rank_label
+
+        key = mode_key(mode)
+        recent = [e for e in self.estimates if e["key"] == key][-ESTIMATE_GAMES:]
+        players = sum(e["ranked"] for e in recent)
+        if not players:
+            return None
+        value = sum(e["value"] * e["ranked"] for e in recent) / players
+        return {"label": rank_label(value), "value": round(value, 2), "games": len(recent), "players": players,
+                "mode": (mode or {}).get("label") or recent[-1]["label"]}
+
+    def mmr_summary(self) -> list[dict]:
+        """The estimate for every queue you've played, most played first."""
+        keys = {}
+        for e in self.estimates:
+            keys[e["key"]] = keys.get(e["key"], 0) + 1
+        out = []
+        for key in sorted(keys, key=lambda k: -keys[k]):
+            label = next(e["label"] for e in reversed(self.estimates) if e["key"] == key)
+            est = self.mmr_estimate({"queueId": key if isinstance(key, int) else None,
+                                     "label": key if not isinstance(key, int) else label})
+            if est:
+                out.append(est)
+        return out
+
     # --- Saving ---
 
     def _write(self, record: dict, rec: Recording | None):
@@ -202,6 +249,8 @@ class GameLog:
             "app": self.build,
         }
         self.logged.add(record["gameId"])
+        self.last_mode = record.get("mode")
+        self._add_estimate(record)
         self.current = None
         if self.failed:
             return

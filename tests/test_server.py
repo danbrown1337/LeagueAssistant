@@ -186,6 +186,10 @@ def test_finished_games_are_saved(monkeypatch, tmp_path):
     [line] = (tmp_path / "games.jsonl").read_text().splitlines()
     rec = json.loads(line)
     assert rec["gameId"] == 42 and rec["win"] and rec["lobbyAverage"]["ranked"] == 3
+    # The estimate leaves you out: the two other players are Platinum II and Emerald IV.
+    assert rec["mmrEstimate"]["ranked"] == 2 and rec["mmrEstimate"]["label"] == "Platinum I"
+    state = client.get("/api/state").json()
+    assert state["postGame"]["mmr"]["games"] == 1 and state["mmr"][0]["label"] == "Platinum I"
 
 
 def test_browser_friendly_routes(monkeypatch):

@@ -148,8 +148,17 @@ function renderPostGame(pg) {
   const basis = pg.ranked
     ? `${pg.queue === "flex" ? "Flex" : "Solo/Duo"} ranks.`
     : "Unranked game, so this compares Solo/Duo ranks. Normal matchmaking uses a hidden rating that can differ.";
+  const est = pg.mmr, one = pg.lobbyEstimate;
+  const mmr = est || one ? `
+      <div class="mmr">
+        <div><div class="muted mmr-k">ESTIMATED MMR${est?.mode ? ` · ${esc(est.mode)}` : ""}</div>
+          <div class="mmr-v">≈ ${esc((est || one).label)}</div></div>
+        <div class="muted mmr-basis">${est ? `Average rank of your lobbies over the last ${est.games} game${est.games === 1 ? "" : "s"} in this queue (${est.players} ranked players).` : `From this game's lobby (${one.ranked} ranked players).`}
+          ${est && one ? ` This game: ≈ ${esc(one.label)}.` : ""} Riot keeps MMR hidden; matchmaking puts you with players near yours, so this is the usual way to estimate it.</div>
+      </div>` : "";
   return `
     <div class="panel fade-in pg">
+      ${mmr}
       <div class="pg-title"><h2>Lobby rank</h2><div class="pg-avg big">${avgLabel(pg.average)}</div></div>
       <div class="pg-grid">${pg.teams.map(team).join("")}</div>
       <div class="muted pg-foot">${basis} Players without a rank this season fall back to their other queue or last season.</div>
@@ -172,7 +181,7 @@ function renderIdle(s, banner) {
       <div id="postgame"></div>
       <div class="hero" id="hero"></div>
       <div class="grid idle-grid">
-        <div class="panel"><h2>Recent games</h2><div id="history"></div></div>
+        <div class="panel"><h2>Recent games</h2><div id="mmr-summary"></div><div id="history"></div></div>
         <div class="panel"><h2>Look up a champion</h2>
           <form class="lookup-form" id="lookup">
             <input id="lk-champ" list="champ-list" placeholder="Champion, e.g. Ahri" autocomplete="off" required>
@@ -195,6 +204,9 @@ function renderIdle(s, banner) {
   }
   document.getElementById("hero").innerHTML = idleHero(s);
   document.getElementById("history").innerHTML = renderHistory(s.history || []);
+  document.getElementById("mmr-summary").innerHTML = s.mmr?.length
+    ? `<div class="chips" title="Estimated from the average rank of your recent lobbies">${s.mmr.map((m) => `<span class="chip warn">${esc(m.mode || "Unknown queue")} MMR ≈ ${esc(m.label)} · ${m.games} game${m.games === 1 ? "" : "s"}</span>`).join("")}</div>`
+    : "";
 }
 
 let champList = null;
