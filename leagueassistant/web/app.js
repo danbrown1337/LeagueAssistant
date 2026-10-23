@@ -376,11 +376,18 @@ function renderGame(s) {
     const extra = [...(adv?.situational || []), ...(adv?.boots && adv.boots.id !== next?.id ? [adv.boots] : [])];
     const situational = extra.length ? `<h3>For this game</h3>${extra.map((p) => `
       <div class="sit">${icon(p, "sm")}<div style="min-width:0"><div class="sname">${esc(p.name)}</div><div class="why">${esc(p.reason)}</div></div></div>`).join("")}` : "";
+    const startCard = adv?.start ? `
+      <div class="next-item start"><div class="item-row">${adv.start.items.map((i) => icon(i, "lg")).join("")}</div>
+        <div style="min-width:0"><div class="muted" style="font-size:12px">START WITH · ${num(adv.start.cost)} gold</div>
+          <div class="n">${adv.start.items.map((i) => esc(i.name)).join(" + ")}</div>
+          <div class="why">${esc(adv.start.reason)}</div></div></div>` : "";
     side = `
       <div class="panel gold"><h2>Your build · ${esc(g.build.champion.name)}${g.build.role === "aram" ? " · ARAM" : ""}</h2>
         ${chips}
-        ${nextCard}
+        ${startCard}
+        ${startCard ? nextCard.replace("BUY NEXT", "THEN") : nextCard}
         ${situational}
+        ${g.build.starting?.length ? `<h3>Starting items</h3><div class="item-row" style="margin:6px 0 12px">${g.build.starting.map((i) => icon(i)).join("")}</div>` : ""}
         <h3>Core</h3><div class="item-row" style="margin:6px 0 12px">${g.buildProgress.map((i) => `<span class="owned ${i.owned ? "have" : ""}">${icon(i)}</span>`).join('<span class="arrow">›</span>')}</div>
         <h3>Later options</h3>${g.build.later.map((slot, i) => `<div class="item-row" style="margin-top:6px"><span class="slot-label">${i + 4}</span>${slot.map((o) => `<div class="opt">${icon(o, "sm")}<span class="p">${pct(o.winRate)}</span></div>`).join("")}</div>`).join("")}
         <h3 style="margin-top:12px">Skills</h3><div class="prio" style="margin-top:6px">${g.build.skills.priority.map((k) => `<span class="key">${k}</span>`).join('<span class="arrow">›</span>')}</div>

@@ -241,6 +241,8 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .prow .items .icon { width: 24px; height: 24px; border-radius: 3px; }
 .next-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid var(--gold); background: linear-gradient(110deg, rgba(200,170,110,.14), transparent 70%); margin-bottom: 12px; }
 .next-item .n { font-family: var(--display); font-size: 20px; text-transform: uppercase; }
+.next-item.start { flex-wrap: wrap; }
+.next-item.start .item-row { gap: 4px; }
 .next-item.urgent { border-color: var(--teal); background: linear-gradient(110deg, rgba(10,200,185,.16), transparent 70%); }
 .why { font-size: 12px; color: var(--muted); line-height: 1.35; }
 .afford { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }

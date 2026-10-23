@@ -154,3 +154,11 @@ def test_aram_build_gets_boots_from_the_rift_build_when_missing():
     v = advisor.aram_build_view(1, UGG(), DDWithRunes())
     assert [i["name"] for i in v["core"]] == ["Ludens", "Sorcs", "Ludens Copy", "Morello"]
     assert v["core"][1]["added"] and "Summoner's Rift" in v["bootsNote"]
+
+
+def test_starting_items_at_the_start_of_the_game():
+    build = {**AP_BUILD, "starting": [{"id": 30}, {"id": 2}]}
+    a = itemizer.advise({"id": 1, "items": []}, [enemy(7)], build, DD, game_time=5)
+    assert [i["name"] for i in a["start"]["items"]] == ["Oblivion Orb", "Sorcs"] and a["start"]["cost"] == 1900
+    assert itemizer.advise({"id": 1, "items": [{"id": 30}]}, [enemy(7)], build, DD, game_time=60)["start"] is None
+    assert itemizer.advise({"id": 1, "items": []}, [enemy(7)], build, DD, game_time=400)["start"] is None

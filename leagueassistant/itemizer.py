@@ -285,6 +285,14 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
         nxt = top and {**_ref(top["id"], dd), "priority": 1, "purpose": "later",
                        "reason": f"Highest win rate late item on U.gg ({round((top.get('winRate') or 0) * 100, 1)}%)."}
 
+    # At the start of the game: U.gg's starting items, until you've bought one of them.
+    starting = [i for i in build.get("starting", []) if i.get("id")]
+    start = None
+    if starting and game_time < 5 * 60 and not owned & {i["id"] for i in starting}:
+        start = {"items": [_ref(i["id"], dd) for i in starting],
+                 "cost": sum(dd.item_cost(i["id"]) for i in starting),
+                 "reason": "U.gg's most common start for this champion."}
+
     # Something you can buy with the gold you have now.
     affordable = None
     if nxt and gold and nxt["cost"] > gold:
@@ -305,6 +313,7 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
 
     return {
         "style": style,
+        "start": start,
         "next": nxt,
         "affordable": affordable,
         "situational": [p for p in situational if not nxt or p["id"] != nxt["id"]],
