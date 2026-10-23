@@ -258,6 +258,8 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .next-item.start .item-row { gap: 4px; }
 .next-item.urgent { border-color: var(--teal); background: linear-gradient(110deg, rgba(10,200,185,.16), transparent 70%); }
 .why { font-size: 12px; color: var(--muted); line-height: 1.35; }
+.upgrade { display: flex; align-items: center; gap: 8px; margin: 4px 0; font-size: 12px; }
+.upgrade b { color: var(--gold-hi); }
 .afford { display: flex; align-items: center; gap: 8px; margin-top: 8px; font-size: 12px; }
 .afford b { color: var(--gold-hi); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
