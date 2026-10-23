@@ -165,6 +165,25 @@ def _legendaries(dd: DDragon, game_map: str) -> dict[int, dict]:
     return out
 
 
+def is_boots(iid: int, dd: DDragon) -> bool:
+    return "Boots" in dd.item(iid).get("tags", [])
+
+
+def is_finished_boots(iid: int, dd: DDragon) -> bool:
+    """Any boots past plain Boots: tier 2, tier 3, and ones you can't buy (Symbiotic Soles).
+
+    Plain Boots and the rune's Slightly Magical Footwear cost 300 and are only a start.
+    """
+    it = dd.item(iid)
+    return "Boots" in it.get("tags", []) and it.get("gold", {}).get("total", 0) > 300
+
+
+def _parts_owned(iid: int, owned: set[int], dd: DDragon) -> list[int]:
+    """Owned items that build into `iid`, from its recipe or from theirs (Magical Footwear -> boots)."""
+    recipe = {int(p) for p in dd.item(iid).get("from", [])}
+    return sorted(p for p in owned if p in recipe or str(iid) in dd.item(p).get("into", []))
+
+
 def _boots(dd: DDragon, game_map: str) -> dict[int, dict]:
     return {iid: it for iid, it in dd.all_items().items()
             if "Boots" in it.get("tags", []) and it.get("gold", {}).get("purchasable")
@@ -187,6 +206,7 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     """What to buy next for this game, situational picks and the threats behind them."""
     game_map = MAP_ARAM if aram else MAP_SR
     owned = {i["id"] for i in me.get("items", [])}
+    has_boots = any(is_finished_boots(i, dd) for i in owned)  # you can only own one pair
     owned_parts = owned | {int(p) for i in owned for p in dd.item(i).get("from", [])}
     style = play_style(build, dd, dd.champion(me.get("id") or 0).get("tags", []))
     t = threats(enemy_views, dd)
@@ -245,7 +265,7 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     # Boots
     boots_note = None
     boots = _boots(dd, game_map)
-    if not aram and not owned & set(boots):
+    if not aram and not has_boots:
         merc = next((i for i, it in boots.items() if {"SpellBlock", "Tenacity"} <= tags(it)), None)
         steel = next((i for i, it in boots.items() if "Armor" in tags(it)), None)
         if merc and (magic >= 0.65 or len(t["cc"]) >= 3):
@@ -262,8 +282,8 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
 
     # Buy next
     core = [i for i in build.get("core", []) if i["id"] not in owned]
-    core_boots = [i for i in core if "Boots" in dd.item(i["id"]).get("tags", [])]
-    if owned & set(boots):
+    core_boots = [i for i in core if is_boots(i["id"], dd)]
+    if has_boots:
         core = [i for i in core if i not in core_boots]  # any finished boots count
     elif boots_note and core_boots:
         core = [boots_note if i in core_boots else i for i in core]
@@ -271,7 +291,7 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     urgent = [p for p in situational if p["priority"] >= 3]
 
     # Urgent picks can jump core legendaries, but never boots.
-    boots_next = bool(core) and "Boots" in dd.item(core[0]["id"]).get("tags", [])
+    boots_next = bool(core) and is_boots(core[0]["id"], dd)
     if urgent and (have_core >= 1 or game_time >= 15 * 60) and not boots_next:
         nxt = urgent[0]
     elif core:
@@ -280,7 +300,9 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     elif situational:
         nxt = situational[0]
     else:
-        later = [o for slot in build.get("later", []) for o in slot if o["id"] not in owned]
+        # No second pair of boots, but an upgrade of the pair you have (tier 3) is fine.
+        later = [o for slot in build.get("later", []) for o in slot if o["id"] not in owned
+                 and not (has_boots and is_boots(o["id"], dd) and not _parts_owned(o["id"], owned, dd))]
         top = max(later, key=lambda o: o.get("winRate") or 0, default=None)
         nxt = top and {**_ref(top["id"], dd), "priority": 1, "purpose": "later",
                        "reason": f"Highest win rate late item on U.gg ({round((top.get('winRate') or 0) * 100, 1)}%)."}
@@ -298,8 +320,7 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
 
     # If you already own parts of it, say so and how much more it costs to finish.
     if nxt:
-        parts = [int(p) for p in dd.item(nxt["id"]).get("from", [])]
-        have = [p for p in parts if p in owned]
+        have = _parts_owned(nxt["id"], owned, dd)
         if have:
             remaining = max(0, nxt["cost"] - sum(dd.item_cost(p) for p in have))
             nxt = {**nxt, "upgrade": {"have": [_ref(p, dd) for p in have], "remaining": remaining}}
@@ -308,7 +329,10 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     affordable = None
     if nxt and gold and nxt["cost"] > gold:
         parts = [int(p) for p in dd.item(nxt["id"]).get("from", [])]
-        parts = [p for p in parts if p not in owned and 0 < dd.item_cost(p) <= gold]
+        # Parts you already cover with something else (Magical Footwear stands in for Boots).
+        covered = {p for p in parts for h in (nxt.get("upgrade") or {}).get("have", [])
+                   if is_boots(p, dd) and is_boots(h["id"], dd)}
+        parts = [p for p in parts if p not in owned and p not in covered and 0 < dd.item_cost(p) <= gold]
         if parts:
             affordable = _ref(max(parts, key=dd.item_cost), dd)
 
