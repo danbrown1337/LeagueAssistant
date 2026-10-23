@@ -201,3 +201,24 @@ def test_browser_friendly_routes(monkeypatch):
     assert r.status_code in (302, 307) and r.headers["location"] == "/"
     for path in ("/", "/healthz", "/api/state"):
         assert client.head(path).status_code == 200, path
+
+
+def test_mayhem_champ_select_and_game_show_augments(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    q = {"id": 2400, "gameMode": "ARAM"}
+    snap = {"clientConnected": True, "phase": "ChampSelect", "queue": q,
+            "champSelect": {"localPlayerCellId": 0, "benchEnabled": True, "theirTeam": [],
+                            "myTeam": [{"cellId": 0, "championId": AHRI}]}}
+    client.post("/api/agent", json=snap, headers=AUTH)
+    cs = client.get("/api/state").json()["champSelect"]
+    assert cs["mode"]["label"] == "ARAM: Mayhem" and cs["augments"]["prismatic"][0] == "Tripleshot"
+    assert cs["build"]["role"] == "aram"
+
+    live = {"activePlayer": {"riotId": "Me#1", "riotIdGameName": "Me"},
+            "allPlayers": [live_player(AHRI, "ORDER", me=True), live_player(YASUO, "CHAOS")],
+            "gameData": {"gameMode": "ARAM", "gameTime": 60}}
+    client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress", "queue": q, "live": live}, headers=AUTH)
+    assert client.get("/api/state").json()["live"]["augments"]["gold"] == ["Magic Missile"]
+    # Plain ARAM: no augments.
+    client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress", "queue": ARAM_QUEUE, "live": live}, headers=AUTH)
+    assert client.get("/api/state").json()["live"]["augments"] is None

@@ -469,11 +469,48 @@ function renderGame(s) {
     </div>`;
 }
 
+// ---------- ARAM: Mayhem augments ----------
+
+const RARITY = [["prismatic", "Prismatic"], ["gold", "Gold"], ["silver", "Silver"]];
+let augKey = null;
+
+function renderAugments(aug, champion) {
+  const wrap = document.getElementById("augments");
+  if (!wrap) return;
+  const key = aug ? JSON.stringify([champion, aug]) : "";
+  if (key === augKey) return;  // only redraw when the champion changes
+  augKey = key;
+  if (!aug) { wrap.hidden = true; wrap.innerHTML = ""; return; }
+  wrap.hidden = false;
+  wrap.innerHTML = `
+    <div class="panel">
+      <div class="aug-head"><h2>Best augments${champion ? ` · ${esc(champion)}` : ""} · ARAM: Mayhem</h2>
+        <input id="aug-search" type="search" placeholder="Find an augment you're offered" autocomplete="off"></div>
+      <div class="muted" style="font-size:12px;margin-bottom:10px">U.gg's ranking for this champion, best first. Type part of an offered augment's name to see where it ranks.</div>
+      <div class="aug-cols">${RARITY.map(([k, label]) => `
+        <div class="aug-col ${k}"><h3>${label} <span class="muted">(${(aug[k] || []).length})</span></h3>
+          <ol>${(aug[k] || []).map((n, i) => `<li data-name="${esc(n.toLowerCase())}"><span class="rank">${i + 1}</span>${esc(n)}</li>`).join("")}</ol></div>`).join("")}
+      </div>
+    </div>`;
+  const input = wrap.querySelector("#aug-search");
+  input?.addEventListener("input", () => {
+    const q = input.value.trim().toLowerCase();
+    wrap.querySelectorAll("li").forEach((li) => {
+      const hit = q && li.dataset.name.includes(q);
+      li.hidden = Boolean(q) && !hit;
+      li.classList.toggle("hit", Boolean(hit));
+    });
+  });
+}
+
 // ---------- Router ----------
 
 function render(s) {
   state = s;
   renderStatus(s);
+  const inSelect = s.phase === "ChampSelect" && s.champSelect;
+  renderAugments(inSelect ? s.champSelect.augments : s.live?.augments,
+                 inSelect ? s.champSelect.me?.name : s.live?.me?.name);
   if (s.phase === "ChampSelect" && s.champSelect) return renderChampSelect(s);
   if (s.live) return renderGame(s);
   if (["InProgress", "GameStart", "Reconnect"].includes(s.phase)) {

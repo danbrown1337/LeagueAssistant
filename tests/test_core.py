@@ -73,6 +73,9 @@ class FakeUGG(UGG):
     def boots(self, champion_id, role=None, aram=False):
         raise LookupError("no boots data in tests")
 
+    def mayhem_augments(self, champion_id):
+        return {"prismatic": ["Tripleshot", "Giant Slayer"], "gold": ["Magic Missile"], "silver": ["Blunt Force"]}
+
     def matchups(self, champion_id, role=None):
         # Yasuo's results in mid: loses a lot to Ahri, Thresh mid is off-role.
         return [Matchup(AHRI, 400, 1000), Matchup(DARIUS, 40, 100), Matchup(THRESH, 100, 300)]
@@ -146,3 +149,10 @@ def test_game_mode():
 def test_parse_champ_select_bench():
     s = lcu.parse_champ_select({"benchEnabled": True, "benchChampions": [{"championId": JINX}, {"championId": 0}]})
     assert s.bench == [JINX] and s.bench_enabled
+
+
+def test_mayhem_is_aram_with_augments():
+    m = advisor.game_mode({"id": 2400, "gameMode": "ARAM"})
+    assert (m["kind"], m["label"], m["mayhem"]) == ("aram", "ARAM: Mayhem", True)
+    assert advisor.game_mode({"id": 9999, "gameMode": "ARAM", "description": "ARAM: Mayhem"})["mayhem"]
+    assert not advisor.game_mode({"id": 450, "gameMode": "ARAM"})["mayhem"]

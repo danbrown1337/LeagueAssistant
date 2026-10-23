@@ -19,7 +19,7 @@ from .ugg import UGG, Build, Matchup
 LIVE_POSITIONS = {"TOP": "top", "JUNGLE": "jungle", "MIDDLE": "mid", "BOTTOM": "adc", "UTILITY": "support"}
 QUEUES = {
     400: "Normal Draft", 420: "Ranked Solo/Duo", 430: "Normal Blind", 440: "Ranked Flex",
-    450: "ARAM", 490: "Quickplay", 700: "Clash", 900: "URF", 1700: "Arena", 1900: "URF",
+    450: "ARAM", 490: "Quickplay", 700: "Clash", 900: "URF", 1700: "Arena", 1900: "URF", 2400: "ARAM: Mayhem",
 }
 
 
@@ -36,9 +36,12 @@ def game_mode(queue: dict | None = None, live: dict | None = None, session: dict
         mode = "ARAM"  # an older agent that doesn't send the queue
     mode = (mode or "CLASSIC").upper()
     qid = (queue or {}).get("id")
-    kind = {"CLASSIC": "sr", "ARAM": "aram"}.get(mode, "other")
-    label = QUEUES.get(qid) or (queue or {}).get("description") or MODE_NAMES.get(mode, mode.title())
-    return {"kind": kind, "gameMode": mode, "queueId": qid, "label": label}
+    desc = (queue or {}).get("description") or ""
+    # ARAM: Mayhem plays like ARAM (U.gg uses its ARAM builds for it) plus augments.
+    mayhem = qid == 2400 or "mayhem" in desc.lower() or mode == "KIWI"
+    kind = "aram" if mayhem else {"CLASSIC": "sr", "ARAM": "aram"}.get(mode, "other")
+    label = "ARAM: Mayhem" if mayhem else QUEUES.get(qid) or desc or MODE_NAMES.get(mode, mode.title())
+    return {"kind": kind, "gameMode": mode, "queueId": qid, "label": label, "mayhem": mayhem}
 
 
 def pct(x: float) -> str:
@@ -146,6 +149,14 @@ def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, a
     return view
 
 
+def augments_view(champion_id: int, ugg: UGG) -> dict | None:
+    """U.gg's ARAM: Mayhem augment ranking for a champion, or None if it has none."""
+    try:
+        return ugg.mayhem_augments(champion_id)
+    except (LookupError, requests.RequestException, ValueError):
+        return None
+
+
 def counter_views(picks: list[Matchup], dd: DDragon) -> list[dict]:
     return [{**champ_ref(m.opponent_id, dd), "winRate": rate(m.wins, m.matches), "games": m.matches} for m in picks]
 
@@ -232,12 +243,15 @@ def _no_lanes_champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon, 
         "matchup": None,
         "build": None,
         "aramOptions": [],
+        "augments": None,
         "errors": [],
         "mode": mode,
     }
     if mode["kind"] != "aram":
         view["errors"].append(f"U.gg has no builds for {mode['label']}.")
         return view
+    if state.my_champion and mode.get("mayhem"):
+        view["augments"] = augments_view(state.my_champion, ugg)
     if state.my_champion:
         try:
             view["build"] = full_build_view(state.my_champion, None, ugg, dd, aram=True)
@@ -369,6 +383,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         "enemies": enemies,
         "score": {"ally": totals(allies, my_team), "enemy": totals(enemies, enemy_team)},
         "objectives": timers,
+        "augments": augments_view(me["id"], ugg) if ugg and me and me.get("id") and mode.get("mayhem") else None,
         "build": my_build,
         "buildProgress": progress,
         "advice": advice,
