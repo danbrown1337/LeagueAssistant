@@ -185,3 +185,40 @@ def test_aram_falls_back_to_the_rift_boots_without_boots_stats():
     v = advisor.full_build_view(1, None, _fake_ugg([1, 15, 3], [1, 2, 15]), DDWithRunes(), aram=True)
     assert [i["name"] for i in v["core"]] == ["Ludens", "Sorcs", "Ludens Copy", "Morello"]
     assert v["core"][1]["added"] and "Summoner's Rift" in v["bootsNote"]
+
+
+def test_map_specific_item_ids_match_the_standard_ones():
+    from leagueassistant.ddragon import DDragon
+
+    dd = DDragon(version="16.21.1")
+    dd.__dict__["_item_data"] = {3047: {"name": "Plated Steelcaps"}, 773047: {"name": "Plated Steelcaps"},
+                                 223047: {"name": "Plated Steelcaps"}, 999999: {"name": "Mystery"}}
+    assert [dd.base_item(i) for i in (3047, 773047, 223047, 999999)] == [3047, 3047, 3047, 999999]
+
+
+def test_any_boots_tick_the_boots_slot_and_aram_ids_count():
+    from leagueassistant import advisor
+
+    class DD(DDWithRunes):
+        _champion_data = {1: {"id": "MissFortune"}}
+
+        def base_item(self, iid):
+            return 11 if iid == 22011 else iid
+
+        def champion_id(self, name):
+            raise KeyError(name)
+
+    build = {"champion": {"id": 1}, "role": "adc", "core": [{"id": 6, "name": "Infinity Edge"}, {"id": 10, "name": "Mercs"}, {"id": 5, "name": "Lord Doms"}],
+             "later": [], "starting": []}
+    game = {
+        "activePlayer": {"riotId": "Me#1", "riotIdGameName": "Me"},
+        "allPlayers": [{"championName": "MissFortune", "rawChampionName": "x_MissFortune", "riotId": "Me#1",
+                        "riotIdGameName": "Me", "team": "ORDER", "position": "", "scores": {},
+                        "items": [{"itemID": 6, "slot": 0}, {"itemID": 22011, "slot": 1}]}],
+        "gameData": {"gameMode": "ARAM", "gameTime": 600},
+    }
+    v = advisor.live_view(game, DD(), my_build=build)
+    assert [i["id"] for i in v["me"]["items"]] == [6, 11]  # a map-specific copy of Steelcaps reads as Steelcaps
+    assert [(i["name"], i["owned"]) for i in v["buildProgress"]] == [("Infinity Edge", True), ("Steelcaps", True),
+                                                                               ("Lord Doms", False)]
+    assert v["advice"]["next"]["name"] == "Lord Doms"  # bought other boots, so it moves on
