@@ -229,3 +229,11 @@ def test_starting_card_goes_once_you_buy_anything_real():
     # Bought Mercs instead of the listed start: the card goes and buy next moves on.
     a = itemizer.advise({"id": 1, "items": [{"id": 10}]}, [enemy(7)], build, DD, game_time=20)
     assert a["start"] is None and a["next"]["name"] == "Ludens"
+
+
+def test_owning_part_of_the_next_item_shows_what_is_left():
+    # Owns the first core item and Oblivion Orb; the next item is built from it.
+    build = {"core": [{"id": 1}, {"id": 3}], "later": []}
+    a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 30}]}, [enemy(7)], build, DD, game_time=900)
+    assert a["next"]["name"] == "Morello"
+    assert [i["name"] for i in a["next"]["upgrade"]["have"]] == ["Oblivion Orb"] and a["next"]["upgrade"]["remaining"] == 2050

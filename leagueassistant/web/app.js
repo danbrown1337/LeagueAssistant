@@ -412,8 +412,9 @@ function renderGame(s) {
     const urgent = adv?.next && adv.next.priority >= 2;
     const nextCard = next ? `
       <div class="next-item ${urgent ? "urgent" : ""}">${icon(next, "lg")}
-        <div style="min-width:0"><div class="muted" style="font-size:12px">BUY NEXT${next.cost ? ` · ${num(next.cost)} gold` : ""}</div>
+        <div style="min-width:0"><div class="muted" style="font-size:12px">${next.upgrade ? "FINISH NEXT" : "BUY NEXT"}${next.cost ? ` · ${num(next.upgrade ? next.upgrade.remaining : next.cost)} gold` : ""}</div>
           <div class="n">${esc(next.name)}</div>
+          ${next.upgrade ? `<div class="upgrade">${next.upgrade.have.map((i) => icon(i, "sm")).join("")}<span>You have ${next.upgrade.have.map((i) => `<b>${esc(i.name)}</b>`).join(" + ")}: <b>${num(next.upgrade.remaining)} gold</b> more to finish it.</span></div>` : ""}
           ${next.reason ? `<div class="why">${esc(next.reason)}</div>` : ""}
           ${adv?.affordable ? `<div class="afford">${icon(adv.affordable, "sm")}<span>You have ${num(g.gold)} gold: buy <b>${esc(adv.affordable.name)}</b> (${num(adv.affordable.cost)}) now.</span></div>` : ""}
         </div></div>` : "";

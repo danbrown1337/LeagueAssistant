@@ -296,6 +296,14 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
                  "cost": sum(dd.item_cost(i["id"]) for i in starting),
                  "reason": "U.gg's most common start for this champion."}
 
+    # If you already own parts of it, say so and how much more it costs to finish.
+    if nxt:
+        parts = [int(p) for p in dd.item(nxt["id"]).get("from", [])]
+        have = [p for p in parts if p in owned]
+        if have:
+            remaining = max(0, nxt["cost"] - sum(dd.item_cost(p) for p in have))
+            nxt = {**nxt, "upgrade": {"have": [_ref(p, dd) for p in have], "remaining": remaining}}
+
     # Something you can buy with the gold you have now.
     affordable = None
     if nxt and gold and nxt["cost"] > gold:
