@@ -67,6 +67,9 @@ class FakeUGG(UGG):
         wins, games = self.ARAM[champion_id]
         return dataclasses.replace(b, wins=wins, matches=games)
 
+    def build(self, champion_id, role=None):
+        return parse_build(champion_id, role or "mid", json.loads((HERE / "ahri_mid_overview.json").read_text()))
+
     def matchups(self, champion_id, role=None):
         # Yasuo's results in mid: loses a lot to Ahri, Thresh mid is off-role.
         return [Matchup(AHRI, 400, 1000), Matchup(DARIUS, 40, 100), Matchup(THRESH, 100, 300)]

@@ -162,8 +162,10 @@ class Hub:
         if b and b["champion"]["id"] == me["id"] and (b["role"] == "aram") == aram:
             return b
         try:
-            build = ugg.aram_build(me["id"]) if aram else ugg.build(me["id"], me.get("role"))
-            self.my_build = advisor.build_view(build, dd)
+            if aram:
+                self.my_build = advisor.aram_build_view(me["id"], ugg, dd)
+            else:
+                self.my_build = advisor.build_view(ugg.build(me["id"], me.get("role")), dd)
         except LookupError:
             self.my_build = None
         return self.my_build
@@ -254,7 +256,9 @@ def create_app() -> FastAPI:
     def build(champion: str, role: str | None = None):
         dd, ugg, cid, role = lookup(champion, role)
         try:
-            return advisor.build_view(ugg.aram_build(cid) if role == "aram" else ugg.build(cid, role), dd)
+            if role == "aram":
+                return advisor.aram_build_view(cid, ugg, dd)
+            return advisor.build_view(ugg.build(cid, role), dd)
         except LookupError as e:
             raise HTTPException(404, str(e))
 

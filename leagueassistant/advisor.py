@@ -87,6 +87,32 @@ def build_view(b: Build, dd: DDragon) -> dict:
     }
 
 
+def is_boots(iid: int, dd: DDragon) -> bool:
+    return "Boots" in dd.item(iid).get("tags", [])
+
+
+def aram_build_view(champion_id: int, ugg: UGG, dd: DDragon) -> dict:
+    """The U.gg ARAM build, with boots filled in when U.gg's ARAM data has none.
+
+    For a few champions U.gg's ARAM data leaves boots out entirely. Their
+    Summoner's Rift build says which boots they buy and when; champions that
+    really skip boots (Yuumi, Cassiopeia) have none there either.
+    """
+    view = build_view(ugg.aram_build(champion_id), dd)
+    if any(is_boots(i["id"], dd) for i in view["core"]):
+        return view
+    try:
+        sr = ugg.build(champion_id)
+    except LookupError:
+        return view
+    for n, iid in enumerate(sr.core_items):
+        if is_boots(iid, dd):
+            view["core"].insert(min(n, len(view["core"])), {**item_ref(iid, dd), "added": True})
+            view["bootsNote"] = "Boots added from the Summoner's Rift build: U.gg's ARAM data has none for this champion."
+            break
+    return view
+
+
 def counter_views(picks: list[Matchup], dd: DDragon) -> list[dict]:
     return [{**champ_ref(m.opponent_id, dd), "winRate": rate(m.wins, m.matches), "games": m.matches} for m in picks]
 
@@ -181,7 +207,7 @@ def _no_lanes_champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon, 
         return view
     if state.my_champion:
         try:
-            view["build"] = build_view(ugg.aram_build(state.my_champion), dd)
+            view["build"] = aram_build_view(state.my_champion, ugg, dd)
         except LookupError as e:
             view["errors"].append(str(e))
     team = [(p["champion"], "you" if p["me"] else "teammate") for p in state.my_team]

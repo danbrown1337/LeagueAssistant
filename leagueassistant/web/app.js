@@ -79,7 +79,8 @@ function renderBuild(b, opts = {}) {
         </div>
         <div>
           <div class="section"><h3>Starting items</h3><div class="item-row">${b.starting.map((x) => icon(x)).join("")}</div></div>
-          <div class="section"><h3>Core build</h3><div class="item-row">${b.core.map((x) => icon(x)).join('<span class="arrow">›</span>')}</div></div>
+          <div class="section"><h3>Core build</h3><div class="item-row">${b.core.map((x) => icon(x)).join('<span class="arrow">›</span>')}</div>
+            ${b.bootsNote ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(b.bootsNote)}</div>` : ""}</div>
           <div class="section"><h3>Later options</h3>${later}</div>
         </div>
         <div>
