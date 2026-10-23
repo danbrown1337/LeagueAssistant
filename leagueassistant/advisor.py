@@ -11,6 +11,7 @@ import time
 import requests
 
 from . import itemizer
+from .objectives import objectives_view
 from .ddragon import DDragon
 from .lcu import ChampSelectState
 from .ugg import UGG, Build, Matchup
@@ -328,7 +329,10 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     if mode["kind"] == "sr":
         lane = next((e for e in enemies if me and me["role"] and e["role"] == me["role"]), None)
 
-    objectives = _objectives((game.get("events") or {}).get("Events", []), team_of)
+    events = (game.get("events") or {}).get("Events", [])
+    objectives = _objectives(events, team_of)
+    game_time = game.get("gameData", {}).get("gameTime", 0)
+    timers = objectives_view(events, team_of, my_team, game_time) if mode["kind"] == "sr" else None
     enemy_team = "CHAOS" if my_team == "ORDER" else "ORDER"
 
     def totals(team_views, team):
@@ -364,6 +368,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         "allies": allies,
         "enemies": enemies,
         "score": {"ally": totals(allies, my_team), "enemy": totals(enemies, enemy_team)},
+        "objectives": timers,
         "build": my_build,
         "buildProgress": progress,
         "advice": advice,

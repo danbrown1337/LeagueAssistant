@@ -12,6 +12,9 @@ on a phone, tablet or second monitor. It follows your game:
   team (how much of their damage is magic or physical, healing, armor and
   magic resist stacking, crowd control, who is fed) and tells you what to buy
   next and why, including the part you can afford right now.
+  On Summoner's Rift it also times Dragon, Elder, Baron and inhibitor
+  respawns from the game's kill events, shows each team's drakes and soul,
+  and flags when enemies are dead and how long the window is.
 - **Post game:** the rank of every player in the game you just played, the
   average rank of your team, the enemy team and the whole lobby, and an
   estimated MMR for that queue (normals and ARAM included).

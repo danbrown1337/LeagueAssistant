@@ -362,6 +362,37 @@ function playerRow(p, lane) {
     </div>`;
 }
 
+function renderObjectives(g) {
+  const o = g.objectives;
+  // Enemies who are dead, and how long until the first is back: the window to take something.
+  const down = g.enemies.filter((e) => e.dead && e.respawn > 0);
+  const strip = down.length ? `
+    <div class="down"><span class="down-n">${down.length} enem${down.length === 1 ? "y" : "ies"} dead</span>
+      ${down.sort((a, b) => a.respawn - b.respawn).map((e) => `<span class="down-p">${icon(e, "sm")}<span data-at="${g.gameTime + e.respawn}">${e.respawn}s</span></span>`).join("")}
+      <span class="muted">window <b data-at="${g.gameTime + Math.min(...down.map((e) => e.respawn))}">${Math.min(...down.map((e) => e.respawn))}s</b></span></div>` : "";
+  if (!o) return strip ? `<div class="objectives">${strip}</div>` : "";
+  const drakes = (list) => list.length ? list.map((d) => `<span class="drake ${d.toLowerCase()}">${esc(d)}</span>`).join("") : '<span class="muted">none</span>';
+  const soul = o.soul ? `<span class="chip ${o.soul === "ally" ? "warn" : "bad"}">${o.soul === "ally" ? "Your" : "Their"} soul</span>`
+    : o.soulPoint ? `<span class="chip ${o.soulPoint === "ally" ? "warn" : "bad"}">${o.soulPoint === "ally" ? "You're" : "They're"} on soul point</span>` : "";
+  const timers = o.timers.map((t) => `<span class="timer-chip ${t.side || ""}">${esc(t.label)} <b data-at="${t.at}" data-up="up">${t.at > g.gameTime ? clock(t.at - g.gameTime) : "up"}</b></span>`).join("");
+  return `
+    <div class="objectives">
+      <div class="timers">${timers}</div>
+      <div class="drakes"><span class="muted">Your drakes</span> ${drakes(o.dragons.ally)} <span class="muted" style="margin-left:10px">Theirs</span> ${drakes(o.dragons.enemy)} ${soul}</div>
+      ${strip}
+    </div>`;
+}
+
+function tickCountdowns() {
+  if (!liveClock.at) return;
+  const now = liveClock.gameTime + (Date.now() - liveClock.at) / 1000;
+  document.querySelectorAll?.("[data-at]").forEach((el) => {
+    const left = Number(el.dataset.at) - now;
+    if (el.dataset.up) el.textContent = left > 0 ? clock(left) : "up";
+    else el.textContent = `${Math.max(0, Math.ceil(left))}s`;
+  });
+}
+
 function renderGame(s) {
   currentView = "game";
   const g = s.live;
@@ -427,6 +458,7 @@ function renderGame(s) {
       <div class="goldbar"><div class="track">
         <div class="lead" style="${diff >= 0 ? `right:50%;width:${leadPct}%;background:var(--blue)` : `left:50%;width:${leadPct}%;background:var(--red)`}"></div><div class="mid"></div></div>
         <div class="legend">${diff === 0 ? "Even on item gold" : `${diff > 0 ? "Your team" : "Enemy team"} +${num(Math.abs(diff))} item gold`}</div></div>
+      ${renderObjectives(g)}
     </div>
     <div class="grid game-grid">
       <div class="panel"><h2 style="color:var(--blue)">Your team</h2>${g.allies.map((p) => playerRow(p, null)).join("")}</div>
@@ -460,6 +492,7 @@ setInterval(() => {
   tickTimer();
   const el = document.getElementById("game-clock");
   if (el && liveClock.at) el.textContent = clock(liveClock.gameTime + (Date.now() - liveClock.at) / 1000);
+  tickCountdowns();
 }, 250);
 
 function connect() {
