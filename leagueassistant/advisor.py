@@ -487,6 +487,8 @@ def post_game_view(game: dict, ranks: dict[str, dict | None], dd: DDragon) -> di
         "ranked": ranked,
         "teams": teams,
         "average": average_rank([p["rank"] for t in teams for p in t["players"]]),
+        # Everyone but you: who matchmaking put you with, the basis of the MMR estimate.
+        "lobbyEstimate": average_rank([p["rank"] for t in teams for p in t["players"] if not p["me"]]),
     }
 
 

@@ -61,6 +61,7 @@ class Hub:
         self.stats = stats
         self.gamelog = gamelog
         self.prev_phase = "None"
+        self.post_mode: dict | None = None  # mode of the game on the post game screen
         self.token = token
         self.min_games = min_games
         self.lock = asyncio.Lock()
@@ -77,6 +78,7 @@ class Hub:
             "live": None,
             "postGame": None,
             "mode": None,
+            "mmr": [],
             "history": [],
             "stats": {"region": stats.region, "rank": stats.rank, "patch": None},
             "updatedAt": 0,
@@ -122,6 +124,8 @@ class Hub:
         post = snap.get("postGame")
         if post and post.get("game"):
             s["postGame"] = advisor.post_game_view(post["game"], post.get("ranks") or {}, dd)
+            if snap.get("queue"):
+                self.post_mode = advisor.game_mode(snap["queue"])
         elif s["phase"] == "ChampSelect":
             s["postGame"] = None
 
@@ -131,6 +135,10 @@ class Hub:
             s["live"] = None
         if self.gamelog:
             self._log(snap, mode, dd)
+            s["mmr"] = self.gamelog.mmr_summary()
+        if s["postGame"]:
+            gl = self.gamelog
+            s["postGame"]["mmr"] = gl.mmr_estimate(self.post_mode or gl.last_mode) if gl else None
         self.prev_phase = s["phase"]
         s["updatedAt"] = int(time.time() * 1000)
 

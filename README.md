@@ -12,9 +12,9 @@ on a phone, tablet or second monitor. It follows your game:
   team (how much of their damage is magic or physical, healing, armor and
   magic resist stacking, crowd control, who is fed) and tells you what to buy
   next and why, including the part you can afford right now.
-- **Post game:** the rank of every player in the game you just played, and the
-  average rank of your team, the enemy team and the whole lobby. This shows
-  roughly what level you're playing at.
+- **Post game:** the rank of every player in the game you just played, the
+  average rank of your team, the enemy team and the whole lobby, and an
+  estimated MMR for that queue (normals and ARAM included).
 - **Between games:** recent match history and a champion lookup.
 - **ARAM:** uses U.gg's ARAM builds instead of Summoner's Rift ones, drops
   lanes and counters, and ranks your champion, your teammates' and the bench
@@ -184,6 +184,14 @@ Counter picks are ranked by matchup win rate pulled toward 50% for small
 samples, and champions that play the role in under 10% of their games are
 left out. Item gold in the scoreboard is the value of items bought, the
 closest thing to team gold the in-game API exposes.
+
+Riot keeps MMR hidden, for normals and ranked alike, and no API exposes it.
+The estimate uses the usual method: matchmaking puts you with players near
+your MMR, so the average rank of the other nine players is a good guess. A
+single lobby is noisy, so the estimate averages your last 10 games in the
+same queue from the game log, weighted by how many ranked players each lobby
+had. It's per queue (Normal Draft, Quickplay, ARAM, ...) because each has
+its own MMR, and it gets steadier the more you play.
 
 Post-game ranks use each player's rank in the queue you played. Normal games
 use Solo/Duo. If a player has no rank there this season, their other ranked

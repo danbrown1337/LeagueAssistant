@@ -86,3 +86,35 @@ def test_unwritable_log_doesnt_raise(tmp_path):
     gl = GameLog(blocker / "games.jsonl")  # parent is a file, so it can't be created
     gl.post_game(POST_RAW, POST_VIEW, MODE, DD)
     assert gl.failed
+
+
+def post_view(value, ranked, me_value=99.0):
+    others = {"label": "x", "value": value, "ranked": ranked, "players": 9}
+    return {**POST_VIEW, "lobbyEstimate": others, "average": {**others, "value": me_value}}
+
+
+ARAM = {"kind": "aram", "label": "ARAM", "queueId": 450, "gameMode": "ARAM"}
+DRAFT = {"kind": "sr", "label": "Normal Draft", "queueId": 400, "gameMode": "CLASSIC"}
+
+
+def test_mmr_estimate_is_per_queue_and_weighted_by_ranked_players(tmp_path):
+    path = tmp_path / "games.jsonl"
+    gl = GameLog(path)
+    gl.post_game({**POST_RAW, "gameId": 1}, post_view(12.0, 9), ARAM, DD)   # Gold IV, 9 ranked
+    gl.post_game({**POST_RAW, "gameId": 2}, post_view(16.0, 3), ARAM, DD)   # Platinum IV, 3 ranked
+    gl.post_game({**POST_RAW, "gameId": 3}, post_view(4.0, 9), DRAFT, DD)   # Bronze IV, another queue
+    est = gl.mmr_estimate(ARAM)
+    assert (est["value"], est["label"], est["games"], est["players"], est["mode"]) == (13.0, "Gold III", 2, 12, "ARAM")
+    assert gl.mmr_estimate(DRAFT)["label"] == "Bronze IV"
+    # Survives a restart, and the summary lists every queue.
+    again = GameLog(path)
+    assert again.mmr_estimate(ARAM)["value"] == 13.0
+    assert [m["mode"] for m in again.mmr_summary()] == ["ARAM", "Normal Draft"]
+
+
+def test_mmr_estimate_uses_the_last_ten_games(tmp_path):
+    gl = GameLog(tmp_path / "games.jsonl")
+    for n in range(12):
+        gl.post_game({**POST_RAW, "gameId": n}, post_view(0.0 if n < 2 else 20.0, 5), ARAM, DD)
+    est = gl.mmr_estimate(ARAM)
+    assert est["games"] == 10 and est["value"] == 20.0
