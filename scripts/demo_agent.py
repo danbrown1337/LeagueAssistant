@@ -87,14 +87,16 @@ def live(t: float) -> dict:
                 "items": [{"itemID": iid, "slot": s, "count": 1, "displayName": ""} for s, iid in enumerate(bought)],
             })
     if t > 400:
-        events.append({"EventName": "DragonKill", "KillerName": "ViMain"})
+        events.append({"EventName": "DragonKill", "EventTime": 400, "KillerName": "ViMain", "DragonType": "Fire"})
     if t > 700:
-        events.append({"EventName": "TurretKilled", "TurretKilled": "Turret_T2_C_05_A", "KillerName": "DemoPlayer"})
+        events.append({"EventName": "TurretKilled", "EventTime": 700, "TurretKilled": "Turret_T2_C_05_A", "KillerName": "DemoPlayer"})
     if t > 900:
-        events.append({"EventName": "DragonKill", "KillerName": "LeeSinMain"})
-        events.append({"EventName": "TurretKilled", "TurretKilled": "Turret_T1_L_03_A", "KillerName": "DariusMain"})
+        events.append({"EventName": "DragonKill", "EventTime": 900, "KillerName": "LeeSinMain", "DragonType": "Water"})
+        events.append({"EventName": "TurretKilled", "EventTime": 900, "TurretKilled": "Turret_T1_L_03_A", "KillerName": "DariusMain"})
     if t > 1300:
-        events.append({"EventName": "BaronKill", "KillerName": "OrnnMain"})
+        events.append({"EventName": "BaronKill", "EventTime": 1300, "KillerName": "OrnnMain"})
+    if t > 1400:
+        events.append({"EventName": "InhibKilled", "EventTime": 1400, "InhibKilled": "Barracks_T2_C1", "KillerName": "DemoPlayer"})
     return {
         "activePlayer": {"riotId": "DemoPlayer#NA1", "riotIdGameName": "DemoPlayer", "currentGold": 400 + (t * 7) % 1600},
         "allPlayers": players, "events": {"Events": events},
