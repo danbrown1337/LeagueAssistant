@@ -144,6 +144,25 @@ class UGG:
             raise LookupError(f"No ARAM build data for champion {champion_id}")
         return parse_build(champion_id, "aram", entry[0])
 
+    def boots(self, champion_id: int, role: str | None = None, aram: bool = False):
+        """U.gg's boots stats, which its overview file leaves out.
+
+        Returns (choices, cores): choices are (item, wins, games) per boots
+        bought, item 0 meaning no boots; cores are ([3 item ids], wins, games)
+        combinations, which show when boots are bought.
+        """
+        try:
+            if aram:
+                entry = self._fetch("builds", champion_id, ARAM_QUEUE)[REGIONS[self.region]][ARAM_RANK][ARAM_ROLE]
+            else:
+                role = normalize_role(role) if role else self.main_role(champion_id)
+                entry = self._fetch("builds", champion_id)[REGIONS[self.region]][RANKS[self.rank]][ROLES[role]]
+            choices = [(int(r[0]), int(r[1]), int(r[2])) for r in entry[5]]
+            cores = [(list(r[0]), int(r[1]), int(r[2])) for r in entry[3]]
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise LookupError(f"No boots data for champion {champion_id}")
+        return choices, cores
+
     def matchups(self, champion_id: int, role: str | None = None) -> list[Matchup]:
         """How this champion does against each lane opponent in the given role."""
         role = normalize_role(role) if role else self.main_role(champion_id)

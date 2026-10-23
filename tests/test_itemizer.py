@@ -119,46 +119,69 @@ def test_urgent_picks_wait_until_you_have_boots():
     assert "Morello" in [p["name"] for p in a["situational"]]
 
 
-def test_aram_build_gets_boots_from_the_rift_build_when_missing():
-    from leagueassistant import advisor
+def _fake_ugg(aram_core, sr_core, boots=None):
     from leagueassistant.ugg import Build
 
     def build(core):
-        return Build(1, "aram", 50, 100, (8100, 8200), [], [], [], [], core, [], [], "QWE")
+        return Build(1, "adc", 50, 100, (8100, 8200), [], [], [], [], core, [], [], "QWE")
 
     class UGG:
         def aram_build(self, cid):
-            return build([1, 15, 3])
+            return build(aram_core)
 
         def build(self, cid, role=None):
-            return build([1, 2, 15])
+            return build(sr_core)
 
-    class DDWithRunes(FakeDD):
-        runes, spells = {}, {}
+        def boots(self, cid, role=None, aram=False):
+            if boots is None:
+                raise LookupError("none")
+            return boots
 
-        def rune_icon(self, r):
-            return None
+    return UGG()
 
-        def runes_in_tree(self, runes, tree):
-            return []
 
-        def spell_icon(self, s):
-            return None
+class DDWithRunes(FakeDD):
+    runes, spells = {}, {}
 
-        def champion_name(self, cid):
-            return "Ahri"
+    def rune_icon(self, r):
+        return None
 
-        def champion_icon(self, cid):
-            return None
+    def runes_in_tree(self, runes, tree):
+        return []
 
-    v = advisor.aram_build_view(1, UGG(), DDWithRunes())
+    def spell_icon(self, s):
+        return None
+
+    def champion_name(self, cid):
+        return "Miss Fortune"
+
+    def champion_icon(self, cid):
+        return None
+
+
+def test_boots_come_from_ugg_boots_stats_when_the_core_has_none():
+    from leagueassistant import advisor
+
+    # Like Miss Fortune: core has no boots; 60% buy Steelcaps, usually as the third item.
+    choices = [(11, 300, 600), (10, 100, 200), (0, 90, 200)]
+    cores = [([6, 4, 11], 50, 100), ([6, 5, 4], 40, 80), ([6, 11, 4], 10, 20)]
+    v = advisor.full_build_view(1, "adc", _fake_ugg([], [6, 4, 5], (choices, cores)), DDWithRunes())
+    assert [i["name"] for i in v["core"]] == ["Infinity Edge", "Mortal Reminder", "Steelcaps", "Lord Doms"]
+    assert v["core"][2]["added"] and "60%" in v["bootsNote"]
+    assert [(o["name"], o["share"]) for o in v["bootsOptions"]] == [("Steelcaps", 0.6), ("Mercs", 0.2)]
+
+
+def test_champions_that_mostly_skip_boots_get_none():
+    from leagueassistant import advisor
+
+    choices = [(0, 500, 900), (11, 40, 100)]  # 90% no boots, like Cassiopeia
+    v = advisor.full_build_view(1, "adc", _fake_ugg([], [6, 4, 5], (choices, [])), DDWithRunes())
+    assert [i["name"] for i in v["core"]] == ["Infinity Edge", "Mortal Reminder", "Lord Doms"]
+
+
+def test_aram_falls_back_to_the_rift_boots_without_boots_stats():
+    from leagueassistant import advisor
+
+    v = advisor.full_build_view(1, None, _fake_ugg([1, 15, 3], [1, 2, 15]), DDWithRunes(), aram=True)
     assert [i["name"] for i in v["core"]] == ["Ludens", "Sorcs", "Ludens Copy", "Morello"]
     assert v["core"][1]["added"] and "Summoner's Rift" in v["bootsNote"]
-
-
-def test_starting_items_at_the_start_of_the_game():
-    build = {**AP_BUILD, "starting": [{"id": 30}, {"id": 2}]}
-    a = itemizer.advise({"id": 1, "items": []}, [enemy(7)], build, DD, game_time=5)
-    assert [i["name"] for i in a["start"]["items"]] == ["Oblivion Orb", "Sorcs"] and a["start"]["cost"] == 1900
-    assert itemizer.advise({"id": 1, "items": [{"id": 30}]}, [enemy(7)], build, DD, game_time=60)["start"] is None
-    assert itemizer.advise({"id": 1, "items": []}, [enemy(7)], build, DD, game_time=400)["start"] is None

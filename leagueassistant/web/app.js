@@ -80,7 +80,8 @@ function renderBuild(b, opts = {}) {
         <div>
           <div class="section"><h3>Starting items</h3><div class="item-row">${b.starting.map((x) => icon(x)).join("")}</div></div>
           <div class="section"><h3>Core build</h3><div class="item-row">${b.core.map((x) => icon(x)).join('<span class="arrow">›</span>')}</div>
-            ${b.bootsNote ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(b.bootsNote)}</div>` : ""}</div>
+            ${b.bootsNote ? `<div class="muted" style="font-size:12px;margin-top:6px">${esc(b.bootsNote)}</div>` : ""}
+            ${b.bootsOptions?.length > 1 ? `<div class="item-row" style="margin-top:6px">${b.bootsOptions.map((o) => `<div class="opt">${icon(o, "sm")}<span class="p">${Math.round(o.share * 100)}%</span></div>`).join("")}</div>` : ""}</div>
           <div class="section"><h3>Later options</h3>${later}</div>
         </div>
         <div>
