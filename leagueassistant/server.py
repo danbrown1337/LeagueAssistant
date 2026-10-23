@@ -22,7 +22,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import advisor, lcu
@@ -229,7 +229,12 @@ def create_app() -> FastAPI:
         await hub.receive(await request.json())
         return {"ok": True}
 
-    @app.get("/api/state")
+    @app.get("/api/agent", include_in_schema=False)
+    async def agent_in_browser():
+        # Only the agent POSTs here; send people who open it in a browser to the dashboard.
+        return RedirectResponse("/")
+
+    @app.api_route("/api/state", methods=["GET", "HEAD"])
     async def state():
         return hub.state
 
@@ -270,13 +275,14 @@ def create_app() -> FastAPI:
         dd, _ = stats.get()
         return sorted((advisor.champ_ref(cid, dd) for cid in dd.champions), key=lambda c: c["name"])
 
-    @app.get("/healthz")
+    # HEAD too: uptime monitors and link previews check pages that way.
+    @app.api_route("/healthz", methods=["GET", "HEAD"])
     async def healthz():
         from .updater import current_build
 
         return {"ok": True, "build": current_build()}
 
-    @app.get("/")
+    @app.api_route("/", methods=["GET", "HEAD"])
     async def index():
         return FileResponse(WEB_DIR / "index.html")
 

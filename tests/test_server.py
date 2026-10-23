@@ -186,3 +186,11 @@ def test_finished_games_are_saved(monkeypatch, tmp_path):
     [line] = (tmp_path / "games.jsonl").read_text().splitlines()
     rec = json.loads(line)
     assert rec["gameId"] == 42 and rec["win"] and rec["lobbyAverage"]["ranked"] == 3
+
+
+def test_browser_friendly_routes(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    r = client.get("/api/agent", follow_redirects=False)
+    assert r.status_code in (302, 307) and r.headers["location"] == "/"
+    for path in ("/", "/healthz", "/api/state"):
+        assert client.head(path).status_code == 200, path
