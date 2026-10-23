@@ -295,7 +295,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     views = []
     for p in players:
         s = p.get("scores", {})
-        items = [i for i in p.get("items", []) if i.get("itemID")]
+        items = [{**i, "itemID": dd.base_item(i["itemID"])} for i in p.get("items", []) if i.get("itemID")]
         views.append({
             **(champ_ref(_live_champion_id(p, dd), dd) or {"name": p.get("championName")}),
             "player": p.get("riotIdGameName") or p.get("summonerName"),
@@ -341,7 +341,14 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     progress = None
     if me and my_build:
         owned = {i["id"] for i in me["items"]}
-        progress = [{**i, "owned": i["id"] in owned} for i in my_build["core"]]
+        # Any finished boots fill the build's boots slot; show the ones you bought.
+        my_boots = next((i for i in me["items"] if is_boots(i["id"], dd) and dd.item_cost(i["id"]) > 300), None)
+        progress = []
+        for i in my_build["core"]:
+            if is_boots(i["id"], dd) and my_boots and i["id"] not in owned:
+                progress.append({**my_boots, "owned": True})
+            else:
+                progress.append({**i, "owned": i["id"] in owned})
 
     advice = None
     if me and my_build:

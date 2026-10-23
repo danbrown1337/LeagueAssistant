@@ -55,6 +55,21 @@ class DDragon:
     def items(self) -> dict[int, str]:
         return {iid: v["name"] for iid, v in self._item_data.items()}
 
+    @functools.cached_property
+    def _base_ids(self) -> dict[str, int]:
+        # Standard item ids are below 10000; some maps and modes add copies, like 223047 (Arena Plated Steelcaps).
+        out = {}
+        for iid, v in self._item_data.items():
+            if iid < 10000 and v.get("name") and (v["name"] not in out or iid < out[v["name"]]):
+                out[v["name"]] = iid
+        return out
+
+    def base_item(self, iid: int) -> int:
+        """The standard id for a map- or mode-specific copy of an item, so it matches U.gg's builds."""
+        if iid < 10000:
+            return iid
+        return self._base_ids.get(self._item_data.get(iid, {}).get("name"), iid)
+
     def item(self, iid: int) -> dict:
         return self._item_data.get(iid, {})
 

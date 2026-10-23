@@ -37,6 +37,9 @@ class FakeDDragon:
     def item_cost(self, iid):
         return 0
 
+    def base_item(self, iid):
+        return iid
+
     def item(self, iid):
         return {}
 
