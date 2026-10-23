@@ -46,7 +46,8 @@ function renderStatus(s) {
     pill(s.agentOnline, "PC agent") +
     pill(s.clientConnected, "League client") +
     `<span class="pill">${esc(phase)}${s.mode ? ` · ${esc(s.mode.label)}` : ""}</span>` +
-    `<span class="pill wide">Patch ${esc(s.stats.patch || "…")} · ${esc(s.stats.rank.replace("_plus", "+").replace("_", " "))} · ${esc(s.stats.region)}</span>`;
+    `<span class="pill wide">Patch ${esc(s.stats.patch || "…")} · ${esc(s.stats.rank.replace("_plus", "+").replace("_", " "))} · ${esc(s.stats.region)}</span>` +
+    `<span class="pill">${s.build ? `Build ${esc(s.build.slice(0, 7))}` : "Dev build"}</span>`;
 }
 
 // ---------- Build card ----------

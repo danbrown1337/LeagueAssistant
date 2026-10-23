@@ -27,6 +27,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import advisor, lcu
 from .gamelog import GameLog
+from .updater import current_build
 from .ddragon import DDragon
 from .ugg import UGG, normalize_role
 
@@ -81,6 +82,7 @@ class Hub:
             "mmr": [],
             "history": [],
             "stats": {"region": stats.region, "rank": stats.rank, "patch": None},
+            "build": current_build(),
             "updatedAt": 0,
         }
 
@@ -214,8 +216,6 @@ class Hub:
 
 def create_app() -> FastAPI:
     stats = Stats(os.environ.get("UGG_REGION", "world"), os.environ.get("UGG_RANK", "emerald_plus"))
-    from .updater import current_build
-
     gamelog = GameLog(build=current_build()) if os.environ.get("LEAGUEASSISTANT_LOG", "1") != "0" else None
     hub = Hub(stats, os.environ.get("AGENT_TOKEN") or None, int(os.environ.get("MIN_GAMES", "100")), gamelog)
 
@@ -286,8 +286,6 @@ def create_app() -> FastAPI:
     # HEAD too: uptime monitors and link previews check pages that way.
     @app.api_route("/healthz", methods=["GET", "HEAD"])
     async def healthz():
-        from .updater import current_build
-
         return {"ok": True, "build": current_build()}
 
     @app.api_route("/", methods=["GET", "HEAD"])
