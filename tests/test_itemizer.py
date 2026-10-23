@@ -23,6 +23,9 @@ ITEMS = {
     13: item("Wits End", 2800, ["SpellBlock", "AttackSpeed"], {"FlatSpellBlockMod": 45, "PercentAttackSpeedMod": 0.5}),
     14: item("Randuin", 2700, ["Armor", "Health"], {"FlatArmorMod": 75, "FlatHPPoolMod": 350}),
     15: item("Ludens Copy", 2750, ["SpellDamage"], {"FlatMagicDamageMod": 90}),
+    16: {**item("Symbiotic Soles", 900, ["Boots"]), "gold": {"total": 900, "purchasable": False}},
+    17: {**item("Magical Footwear", 300, ["Boots"]), "into": ["2"], "gold": {"total": 300, "purchasable": False}},
+    18: item("Plain Boots", 300, ["Boots"]),
 }
 CHAMPS = {
     1: {"id": "Ahri", "tags": ["Mage", "Assassin"], "info": {"attack": 3, "magic": 8}},
@@ -119,11 +122,11 @@ def test_urgent_picks_wait_until_you_have_boots():
     assert "Morello" in [p["name"] for p in a["situational"]]
 
 
-def _fake_ugg(aram_core, sr_core, boots=None):
+def _fake_ugg(aram_core, sr_core, boots=None, role="adc"):
     from leagueassistant.ugg import Build
 
     def build(core):
-        return Build(1, "adc", 50, 100, (8100, 8200), [], [], [], [], core, [], [], "QWE")
+        return Build(1, role, 50, 100, (8100, 8200), [], [], [], [], core, [], [], "QWE")
 
     class UGG:
         def aram_build(self, cid):
@@ -237,3 +240,72 @@ def test_owning_part_of_the_next_item_shows_what_is_left():
     a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 30}]}, [enemy(7)], build, DD, game_time=900)
     assert a["next"]["name"] == "Morello"
     assert [i["name"] for i in a["next"]["upgrade"]["have"]] == ["Oblivion Orb"] and a["next"]["upgrade"]["remaining"] == 2050
+
+
+def test_boots_you_cant_buy_still_count_as_boots():
+    # Symbiotic Soles aren't for sale, but owning them fills the boots slot.
+    a = itemizer.advise({"id": 1, "items": [{"id": 16}]}, [enemy(7)], AP_BUILD, DD, game_time=600)
+    assert a["next"]["name"] == "Ludens" and a["boots"] is None
+
+
+def test_never_suggests_a_second_pair_of_boots():
+    build = {"core": [{"id": 1}, {"id": 2}], "later": [[{"id": 10, "winRate": 0.6}, {"id": 8, "winRate": 0.52}]]}
+    a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 2}]}, [enemy(7)], build, DD, game_time=1500)
+    # Mercs had the higher win rate, but you already have boots.
+    assert "Mercs" not in [p["name"] for p in [a["next"], *a["situational"]]]
+    neutral = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 2}]}, [enemy(7), enemy(8)], build, DD, game_time=1500)
+    assert neutral["next"]["name"] == "Banshee"
+
+
+def test_magical_footwear_counts_toward_the_boots():
+    build = {"core": [{"id": 2}, {"id": 1}], "later": []}
+    a = itemizer.advise({"id": 1, "items": [{"id": 17}]}, [enemy(7), enemy(8)], build, DD, game_time=700)
+    assert a["next"]["name"] == "Sorcs"
+    assert a["next"]["upgrade"]["have"][0]["name"] == "Magical Footwear" and a["next"]["upgrade"]["remaining"] == 800
+
+
+def test_plain_boots_dont_count_as_finished():
+    build = {"core": [{"id": 2}, {"id": 1}], "later": []}
+    a = itemizer.advise({"id": 1, "items": [{"id": 18}]}, [enemy(7), enemy(8)], build, DD, game_time=700)
+    assert a["next"]["name"] == "Sorcs"
+
+
+def test_rift_build_gets_usual_boots_when_boots_stats_fail():
+    from leagueassistant import advisor
+
+    class DD(DDWithRunes):
+        def all_items(self):
+            return {**ITEMS, 3020: item("Sorcerer's Shoes", 1100, ["Boots"]), 3158: item("Ionian Boots", 900, ["Boots"])}
+
+        def item(self, iid):
+            return self.all_items().get(iid, {})
+
+        def item_name(self, iid):
+            return self.item(iid).get("name", f"#{iid}")
+
+        def champion(self, cid):
+            return {"id": "Ahri", "tags": ["Mage"]}
+
+    v = advisor.full_build_view(1, "mid", _fake_ugg([], [1, 15, 3]), DD())
+    assert [i["name"] for i in v["core"]] == ["Ludens", "Sorcerer's Shoes", "Ludens Copy", "Morello"]
+    assert "usual pick" in v["bootsNote"]
+    # Supports get Ionian Boots, whatever their items look like.
+    support = _fake_ugg([], [1, 15, 3], role="support")
+    assert advisor.full_build_view(1, "support", support, DD())["core"][1]["name"] == "Ionian Boots"
+
+
+def test_magical_footwear_means_dont_buy_plain_boots():
+    build = {"core": [{"id": 2}, {"id": 1}], "later": []}
+    a = itemizer.advise({"id": 1, "items": [{"id": 17}]}, [enemy(7), enemy(8)], build, DD,
+                        gold=500, game_time=700)
+    assert a["next"]["name"] == "Sorcs" and a["affordable"] is None  # not "buy Boots": Magical Footwear covers it
+
+
+def test_tier_three_upgrade_of_your_boots_is_still_suggested():
+    ITEMS[19] = {**item("Spellslinger", 1100, ["Boots"], frm=[2])}
+    try:
+        build = {"core": [{"id": 1}, {"id": 2}], "later": [[{"id": 19, "winRate": 0.6}, {"id": 8, "winRate": 0.5}]]}
+        a = itemizer.advise({"id": 1, "items": [{"id": 1}, {"id": 2}]}, [enemy(7), enemy(8)], build, DD, game_time=1500)
+        assert a["next"]["name"] == "Spellslinger"
+    finally:
+        del ITEMS[19]

@@ -93,10 +93,12 @@ def build_view(b: Build, dd: DDragon) -> dict:
     }
 
 
-def is_boots(iid: int, dd: DDragon) -> bool:
-    return "Boots" in dd.item(iid).get("tags", [])
+is_boots = itemizer.is_boots
 
 
+NO_BOOTS = {"Yuumi"}  # champions that never buy boots, for when U.gg's boots stats can't be read
+# The usual boots when U.gg's boots stats can't be read: Ionian for supports, else by how the champion builds.
+GUESS_BOOTS = {"support": 3158, "ap": 3020, "adc": 3006, "ad": 3047, "tank": 3047}
 MIN_BOOTS_SHARE = 0.25  # add boots only when at least this share of games buy that pair
 
 
@@ -114,7 +116,7 @@ def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, a
     leaves boots out (Miss Fortune), and for some ARAM champions it has no
     boots at all. Its builds file has the boots players buy, so we add the
     most common pair where its item orders usually put them. Champions that
-    mostly skip boots (Yuumi, Cassiopeia) stay without.
+    mostly skip boots (Yuumi) stay without.
     """
     view = build_view(ugg.aram_build(champion_id) if aram else ugg.build(champion_id, role), dd)
     if any(is_boots(i["id"], dd) for i in view["core"]):
@@ -134,6 +136,17 @@ def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, a
                                     for i, w, g in boots[:3]]
             view["bootsNote"] = (f"U.gg lists boots separately: {dd.item_name(iid)} in {round(games / total * 100)}% "
                                  f"of games.")
+        return view
+    champ = dd.champion(champion_id)
+    if not choices and not aram and champ.get("id") not in NO_BOOTS:
+        # Couldn't read U.gg's boots stats: use the usual boots rather than leaving them out,
+        # marked so it's clear it's a guess.
+        kind = "support" if view["role"] == "support" else itemizer.play_style(view, dd, champ.get("tags", []))
+        iid = GUESS_BOOTS[kind]
+        if dd.item(iid):
+            view["core"].insert(min(1, len(view["core"])), {**item_ref(iid, dd), "added": True})
+            view["bootsNote"] = (f"Couldn't read U.gg's boots stats, so {dd.item_name(iid)} is the usual pick "
+                                 f"for this kind of champion.")
         return view
     if aram:
         # No boots data: borrow the boots from the Summoner's Rift build.
@@ -360,7 +373,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     if me and my_build:
         owned = {i["id"] for i in me["items"]}
         # Any finished boots fill the build's boots slot; show the ones you bought.
-        my_boots = next((i for i in me["items"] if is_boots(i["id"], dd) and dd.item_cost(i["id"]) > 300), None)
+        my_boots = next((i for i in me["items"] if itemizer.is_finished_boots(i["id"], dd)), None)
         progress = []
         for i in my_build["core"]:
             if is_boots(i["id"], dd) and my_boots and i["id"] not in owned:
