@@ -222,3 +222,10 @@ def test_any_boots_tick_the_boots_slot_and_aram_ids_count():
     assert [(i["name"], i["owned"]) for i in v["buildProgress"]] == [("Infinity Edge", True), ("Steelcaps", True),
                                                                                ("Lord Doms", False)]
     assert v["advice"]["next"]["name"] == "Lord Doms"  # bought other boots, so it moves on
+
+
+def test_starting_card_goes_once_you_buy_anything_real():
+    build = {**AP_BUILD, "starting": [{"id": 30}, {"id": 2}]}
+    # Bought Mercs instead of the listed start: the card goes and buy next moves on.
+    a = itemizer.advise({"id": 1, "items": [{"id": 10}]}, [enemy(7)], build, DD, game_time=20)
+    assert a["start"] is None and a["next"]["name"] == "Ludens"

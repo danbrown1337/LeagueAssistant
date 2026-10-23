@@ -288,7 +288,10 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
     # At the start of the game: U.gg's starting items, until you've bought one of them.
     starting = [i for i in build.get("starting", []) if i.get("id")]
     start = None
-    if starting and game_time < 5 * 60 and not owned & {i["id"] for i in starting}:
+    # Gone as soon as you own any real item, even one that isn't on U.gg's list (Boots of Swiftness
+    # instead of Boots + potions + Serrated Dirk): you've already started.
+    bought = {i for i in owned if dd.item(i) and not {"Consumable", "Trinket"} & set(dd.item(i).get("tags", []))}
+    if starting and game_time < 5 * 60 and not bought:
         start = {"items": [_ref(i["id"], dd) for i in starting],
                  "cost": sum(dd.item_cost(i["id"]) for i in starting),
                  "reason": "U.gg's most common start for this champion."}
