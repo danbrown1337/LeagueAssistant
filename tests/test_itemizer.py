@@ -27,6 +27,10 @@ ITEMS = {
     17: {**item("Magical Footwear", 300, ["Boots"]), "into": ["2"], "gold": {"total": 300, "purchasable": False}},
     18: item("Plain Boots", 300, ["Boots"]),
 }
+ITEMS[2]["from"] = ["18"]  # Sorcs are built from Plain Boots
+# Like Data Dragon: "base" is the combine cost, the total minus the parts.
+for _it in ITEMS.values():
+    _it["gold"]["base"] = _it["gold"]["total"] - sum(ITEMS[int(p)]["gold"]["total"] for p in _it.get("from", []))
 CHAMPS = {
     1: {"id": "Ahri", "tags": ["Mage", "Assassin"], "info": {"attack": 3, "magic": 8}},
     2: {"id": "Soraka", "tags": ["Support", "Mage"], "info": {"attack": 2, "magic": 7}},
@@ -257,7 +261,8 @@ def test_never_suggests_a_second_pair_of_boots():
     assert neutral["next"]["name"] == "Banshee"
 
 
-def test_magical_footwear_counts_toward_the_boots():
+def test_magical_footwear_counts_toward_the_boots(monkeypatch):
+    monkeypatch.setattr(itemizer, "STANDS_IN_FOR", {17: 18})  # Magical Footwear works as Plain Boots
     build = {"core": [{"id": 2}, {"id": 1}], "later": []}
     a = itemizer.advise({"id": 1, "items": [{"id": 17}]}, [enemy(7), enemy(8)], build, DD, game_time=700)
     assert a["next"]["name"] == "Sorcs"
@@ -294,7 +299,8 @@ def test_rift_build_gets_usual_boots_when_boots_stats_fail():
     assert advisor.full_build_view(1, "support", support, DD())["core"][1]["name"] == "Ionian Boots"
 
 
-def test_magical_footwear_means_dont_buy_plain_boots():
+def test_magical_footwear_means_dont_buy_plain_boots(monkeypatch):
+    monkeypatch.setattr(itemizer, "STANDS_IN_FOR", {17: 18})
     build = {"core": [{"id": 2}, {"id": 1}], "later": []}
     a = itemizer.advise({"id": 1, "items": [{"id": 17}]}, [enemy(7), enemy(8)], build, DD,
                         gold=500, game_time=700)
@@ -309,3 +315,15 @@ def test_tier_three_upgrade_of_your_boots_is_still_suggested():
         assert a["next"]["name"] == "Spellslinger"
     finally:
         del ITEMS[19]
+
+
+def test_finish_cost_uses_every_part_you_hold_once():
+    ITEMS[20] = item("Dagger", 250, [])
+    ITEMS[21] = {**item("Greaves", 1100, ["Boots"], frm=[18, 20, 20])}
+    ITEMS[21]["gold"]["base"] = 1100 - 300 - 250 - 250
+    try:
+        assert itemizer.finish_cost(21, [18, 20, 20], DD) == (300, [18, 20, 20])  # both Daggers count
+        assert itemizer.finish_cost(21, [18, 20], DD)[0] == 550
+        assert itemizer.finish_cost(21, [], DD) == (1100, [])
+    finally:
+        del ITEMS[20], ITEMS[21]

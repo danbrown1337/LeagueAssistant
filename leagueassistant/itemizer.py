@@ -9,6 +9,7 @@ the reason.
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 
 from .ddragon import DDragon
@@ -184,6 +185,36 @@ def _parts_owned(iid: int, owned: set[int], dd: DDragon) -> list[int]:
     return sorted(p for p in owned if p in recipe or str(iid) in dd.item(p).get("into", []))
 
 
+# Items that stand in for another in recipes: the rune's Slightly Magical Footwear works as Boots.
+STANDS_IN_FOR = {2422: 1001}
+
+
+def finish_cost(iid: int, inventory: list[int], dd: DDragon) -> tuple[int, list[int]]:
+    """Gold left to finish `iid` with what you hold, the way the shop prices it, and the parts used.
+
+    Walks the whole recipe, so a Long Sword toward the Pickaxe inside Infinity Edge counts, and
+    each item you hold is used once (Berserker's Greaves needs both of your Daggers).
+    """
+    inv = Counter(STANDS_IN_FOR.get(i, i) for i in inventory)
+    used: list[int] = []
+
+    def cost(item: int, top: bool) -> int:
+        if not top and inv[item] > 0:
+            inv[item] -= 1
+            used.append(item)
+            return 0
+        it = dd.item(item)
+        recipe = [int(p) for p in it.get("from", [])]
+        if not recipe:
+            return dd.item_cost(item)
+        return it.get("gold", {}).get("base", 0) + sum(cost(p, False) for p in recipe)
+
+    total = cost(iid, True)
+    originals = {v: k for k, v in STANDS_IN_FOR.items()}
+    shown = [originals[u] if u in originals and u not in inventory else u for u in used]
+    return total, shown
+
+
 def _boots(dd: DDragon, game_map: str) -> dict[int, dict]:
     return {iid: it for iid, it in dd.all_items().items()
             if "Boots" in it.get("tags", []) and it.get("gold", {}).get("purchasable")
@@ -320,9 +351,8 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
 
     # If you already own parts of it, say so and how much more it costs to finish.
     if nxt:
-        have = _parts_owned(nxt["id"], owned, dd)
+        remaining, have = finish_cost(nxt["id"], [i["id"] for i in me.get("items", [])], dd)
         if have:
-            remaining = max(0, nxt["cost"] - sum(dd.item_cost(p) for p in have))
             nxt = {**nxt, "upgrade": {"have": [_ref(p, dd) for p in have], "remaining": remaining}}
 
     # Something you can buy with the gold you have now.
