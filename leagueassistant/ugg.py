@@ -28,6 +28,9 @@ RANKS = {
     "diamond_2_plus": "15", "emerald": "16", "emerald_plus": "17",
 }
 ROLES = {"jungle": "1", "support": "2", "adc": "3", "top": "4", "mid": "5"}
+# ARAM: Mayhem augment rankings live on U.gg's static host, not stats2.
+MAYHEM_BASE = "https://static.bigbrain.gg/custom-aram-mayhem"
+MAYHEM_RARITIES = {"kPrismatic": "prismatic", "kGold": "gold", "kSilver": "silver"}
 # ARAM stats have one role and one rank bucket.
 ARAM_QUEUE, ARAM_RANK, ARAM_ROLE = "normal_aram", "8", "6"
 ROLE_ORDER = ["top", "jungle", "mid", "adc", "support"]
@@ -162,6 +165,31 @@ class UGG:
         except (KeyError, IndexError, TypeError, ValueError):
             raise LookupError(f"No boots data for champion {champion_id}")
         return choices, cores
+
+    def _mayhem(self, name: str) -> dict:
+        """A Mayhem file for this patch, or the previous one early in a new patch."""
+        if name not in self._cache:
+            self._cache[name] = None  # remembered as missing too, so it isn't refetched every update
+            major, minor = (int(x) for x in self.patch.split("."))
+            for patch in [f"{major}_{minor}"] + ([f"{major}_{minor - 1}"] if minor > 1 else []):
+                r = self.session.get(f"{MAYHEM_BASE}/{patch}/" + name.format(patch=patch), timeout=30)
+                if r.status_code == 200:
+                    self._cache[name] = r.json()
+                    break
+        if self._cache[name] is None:
+            raise LookupError(f"U.gg has no ARAM: Mayhem data ({name})")
+        return self._cache[name]
+
+    def mayhem_augments(self, champion_id: int) -> dict[str, list[str]]:
+        """Augments ranked best first for this champion in ARAM: Mayhem, per rarity."""
+        names = self._mayhem("aram-mayhem-augment-manifest-{patch}.json")
+        data = self._mayhem(f"tierlist-per-champion-augments-rarity-{{patch}}/tierlist-augments-{champion_id}-{{patch}}.json")
+        out = {}
+        for key, rarity in MAYHEM_RARITIES.items():
+            out[rarity] = [names.get(str(i), f"Augment {i}") for i in (data.get("rarities") or {}).get(key, [])]
+        if not any(out.values()):
+            raise LookupError(f"No ARAM: Mayhem augments for champion {champion_id}")
+        return out
 
     def matchups(self, champion_id: int, role: str | None = None) -> list[Matchup]:
         """How this champion does against each lane opponent in the given role."""

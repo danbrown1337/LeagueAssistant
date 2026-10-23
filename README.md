@@ -24,6 +24,9 @@ on a phone, tablet or second monitor. It follows your game:
   by ARAM win rate so you know what to grab or trade for. For modes U.gg has
   no data for (Arena, URF and others) it says so and shows only the
   scoreboard.
+- **ARAM: Mayhem:** the ARAM build (U.gg uses the same one for Mayhem) plus
+  U.gg's augment ranking for your champion, Prismatic, Gold and Silver, best
+  first, with a search box to check where an offered augment ranks.
 
 ## Run it on the gaming PC (Windows)
 

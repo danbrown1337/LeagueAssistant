@@ -302,6 +302,17 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .tier-diamond { color: #7a8ef0; } .tier-master { color: #b65fe0; } .tier-grandmaster { color: #e2564f; }
 .tier-challenger { color: #f4d27a; }
 
+.augments-wrap { max-width: 1400px; margin: 0 auto; padding: 0 20px 20px; }
+.aug-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 6px; }
+.aug-head input { min-width: 240px; flex: 0 1 320px; }
+.aug-cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+.aug-col ol { list-style: none; margin: 8px 0 0; padding: 0; max-height: 420px; overflow-y: auto; }
+.aug-col li { display: flex; gap: 8px; align-items: baseline; padding: 3px 6px; border-radius: 4px; font-size: 13px; }
+.aug-col li .rank { min-width: 22px; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+.aug-col li.hit { background: rgba(200,170,110,.18); outline: 1px solid var(--line-gold); }
+.aug-col.prismatic h3 { color: #d9a6ff; } .aug-col.gold h3 { color: var(--gold); } .aug-col.silver h3 { color: #c3ccd6; }
+@media (max-width: 720px) { .augments-wrap { padding: 0 12px 12px; } .aug-cols { grid-template-columns: 1fr; } .aug-col ol { max-height: 260px; } }
+
 .fade-in { animation: fade .35s ease-out; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 
