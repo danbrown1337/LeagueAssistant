@@ -12,6 +12,7 @@ import requests
 
 from . import itemizer
 from .objectives import objectives_view
+from .spells import spells_view
 from .ddragon import DDragon
 from .lcu import ChampSelectState
 from .ugg import UGG, Build, Matchup
@@ -313,7 +314,7 @@ def _objectives(events: list[dict], team_of: dict[str, str]) -> dict[str, dict[s
 
 
 def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | None = None,
-              mode: dict | None = None) -> dict:
+              mode: dict | None = None, spell_uses: dict | None = None) -> dict:
     active = game.get("activePlayer", {})
     my_names = _player_names(active)
     players = game.get("allPlayers", [])
@@ -399,6 +400,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         "enemies": enemies,
         "score": {"ally": totals(allies, my_team), "enemy": totals(enemies, enemy_team)},
         "objectives": timers,
+        "spells": spells_view(players, views, spell_uses or {}, dd),
         "augments": augments_view(me["id"], ugg) if ugg and me and me.get("id") and mode.get("mayhem") else None,
         "build": my_build,
         "buildProgress": progress,

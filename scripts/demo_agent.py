@@ -85,6 +85,11 @@ def live(t: float) -> dict:
                            "assists": int(progress * rnd.randint(2, 14)), "creepScore": int(t / 60 * (7 if pos not in ("UTILITY",) else 1.2)),
                            "wardScore": progress * 20},
                 "items": [{"itemID": iid, "slot": s, "count": 1, "displayName": ""} for s, iid in enumerate(bought)],
+                "summonerSpells": {
+                    "summonerSpellOne": {"displayName": "Flash", "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"},
+                    "summonerSpellTwo": {"displayName": "Smite" if pos == "JUNGLE" else "Ignite",
+                                         "rawDisplayName": f"GeneratedTip_SummonerSpell_{'SummonerSmite' if pos == 'JUNGLE' else 'SummonerDot'}_DisplayName"},
+                },
             })
     if t > 400:
         events.append({"EventName": "DragonKill", "EventTime": 400, "KillerName": "ViMain", "DragonType": "Fire"})

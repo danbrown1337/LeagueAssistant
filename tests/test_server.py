@@ -40,6 +40,10 @@ class FakeDDragon:
     def base_item(self, iid):
         return iid
 
+    def spell_list(self):
+        return {4: {"id": "SummonerFlash", "name": "Flash", "cooldown": [300]},
+                14: {"id": "SummonerDot", "name": "Ignite", "cooldown": [180]}}
+
     def item(self, iid):
         return {}
 
@@ -222,3 +226,42 @@ def test_mayhem_champ_select_and_game_show_augments(monkeypatch):
     # Plain ARAM: no augments.
     client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress", "queue": ARAM_QUEUE, "live": live}, headers=AUTH)
     assert client.get("/api/state").json()["live"]["augments"] is None
+
+
+def spell_game(t, items=()):
+    def p(champ, team, me=False):
+        d = live_player(champ, team, me)
+        d["items"] = [{"itemID": i, "slot": n} for n, i in enumerate(items)] if me else []
+        d["summonerSpells"] = {
+            "summonerSpellOne": {"displayName": "Flash", "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"},
+            "summonerSpellTwo": {"displayName": "Ignite", "rawDisplayName": "GeneratedTip_SummonerSpell_SummonerDot_DisplayName"},
+        }
+        return d
+    return {"activePlayer": {"riotId": "Me#1", "riotIdGameName": "Me"},
+            "allPlayers": [p(AHRI, "ORDER", me=True), p(YASUO, "CHAOS")],
+            "gameData": {"gameMode": "CLASSIC", "gameTime": t}}
+
+
+def test_summoner_spell_timers(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    post = lambda t: client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress", "live": spell_game(t)}, headers=AUTH)
+    post(600)
+    spells = client.get("/api/state").json()["live"]["spells"]
+    foe = next(p for p in spells if not p["ally"])
+    assert [(s["name"], s["cooldown"], s["usedAt"]) for s in foe["spells"]] == [("Flash", 300, None), ("Ignite", 180, None)]
+
+    # Tap the enemy's Flash at 10:05; it survives the next update, and tapping again undoes it.
+    assert client.post("/api/spells", json={"player": foe["key"], "slot": "summonerSpellOne", "at": 605}).status_code == 200
+    post(610)
+    foe = next(p for p in client.get("/api/state").json()["live"]["spells"] if not p["ally"])
+    assert foe["spells"][0]["usedAt"] == 605
+    client.post("/api/spells", json={"player": foe["key"], "slot": "summonerSpellOne", "at": None})
+    assert next(p for p in client.get("/api/state").json()["live"]["spells"] if not p["ally"])["spells"][0]["usedAt"] is None
+
+    assert client.post("/api/spells", json={"player": "Nobody#0", "slot": "summonerSpellOne", "at": 1}).status_code == 400
+
+    # A new game clears the timers.
+    client.post("/api/spells", json={"player": foe["key"], "slot": "summonerSpellTwo", "at": 615})
+    post(20)
+    foe = next(p for p in client.get("/api/state").json()["live"]["spells"] if not p["ally"])
+    assert foe["spells"][1]["usedAt"] is None

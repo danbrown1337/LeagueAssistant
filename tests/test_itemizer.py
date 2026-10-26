@@ -62,6 +62,9 @@ class FakeDD:
     def item_cost(self, iid):
         return ITEMS.get(iid, {}).get("gold", {}).get("total", 0)
 
+    def spell_list(self):
+        return {}
+
 
 DD = FakeDD()
 AP_BUILD = {"core": [{"id": 1}, {"id": 2}, {"id": 15}], "later": []}
@@ -356,3 +359,21 @@ def test_boots_outside_the_six_item_slots_still_count():
     v = advisor.live_view(game, DD(), my_build=build)
     assert [i["id"] for i in v["me"]["items"]] == [6, 2]  # boots kept, ward left out
     assert v["advice"]["next"]["name"] == "Lord Doms"
+
+
+def test_summoner_spell_haste_from_items():
+    from leagueassistant import spells
+
+    ITEMS[50] = {**item("Ionian", 900, ["Boots"]), "description": "<passive>Ionian Insight</passive> Gain 10 Summoner Spell Haste."}
+    try:
+        assert spells.summoner_haste([50, 6], DD) == 10
+        class D(FakeDD):
+            def spell_list(self):
+                return {4: {"id": "SummonerFlash", "name": "Flash", "cooldown": [300]}}
+            def spell_icon(self, key):
+                return None
+        p = {"riotId": "A#1", "summonerSpells": {"summonerSpellOne": {"rawDisplayName": "GeneratedTip_SummonerSpell_SummonerFlash_DisplayName"}}}
+        v = spells.spells_view([p], [{"id": 1, "name": "Ahri", "items": [{"id": 50}], "ally": False}], {"A#1|summonerSpellOne": 100}, D())
+        assert v[0]["spells"] == [{"slot": "summonerSpellOne", "name": "Flash", "icon": None, "cooldown": 273, "usedAt": 100}]
+    finally:
+        del ITEMS[50]

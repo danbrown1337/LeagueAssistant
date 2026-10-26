@@ -15,6 +15,11 @@ on a phone, tablet or second monitor. It follows your game:
   On Summoner's Rift it also times Dragon, Elder, Baron and inhibitor
   respawns from the game's kill events, shows each team's drakes and soul,
   and flags when enemies are dead and how long the window is.
+  Summoner spell timers for all ten players: tap a spell when you see it
+  used and it counts down (cooldowns from Data Dragon, less Summoner Spell
+  Haste from items like Ionian Boots; tap again to undo). Taps are shared,
+  so marking Flash on your phone shows on the PC too. There are no ultimate
+  timers: Riot's third-party app policy bans enemy ult tracking.
 - **Post game:** the rank of every player in the game you just played, the
   average rank of your team, the enemy team and the whole lobby, and an
   estimated MMR for that queue (normals and ARAM included).

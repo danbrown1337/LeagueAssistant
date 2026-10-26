@@ -384,12 +384,56 @@ function renderObjectives(g) {
     </div>`;
 }
 
+function currentGameTime() {
+  return liveClock.at ? liveClock.gameTime + (Date.now() - liveClock.at) / 1000 : 0;
+}
+
+function renderSpells(g) {
+  if (!g.spells?.length) return "";
+  const now = currentGameTime();
+  const row = (p) => `
+    <div class="sp-player ${p.me ? "me" : ""}">${icon(p, "sm")}
+      ${p.spells.map((sp) => {
+        const readyAt = sp.usedAt != null ? sp.usedAt + sp.cooldown : null;
+        const down = readyAt != null && readyAt > now;
+        return `<button class="sp ${down ? "down" : ""}" data-spell="${esc(p.key)}" data-slot="${esc(sp.slot)}"
+            data-used="${down ? "1" : ""}" title="${esc(p.name)} ${esc(sp.name)}: tap when used, tap again to undo">
+          ${icon(sp, "sm")}<span class="sp-t" ${readyAt != null ? `data-at="${readyAt}" data-up=""` : ""}>${down ? clock(readyAt - now) : ""}</span></button>`;
+      }).join("")}
+    </div>`;
+  const enemies = g.spells.filter((p) => !p.ally), allies = g.spells.filter((p) => p.ally);
+  return `
+    <div class="spells">
+      <div class="sp-head"><span class="muted">Summoner spells · tap when you see one used</span></div>
+      <div class="sp-team enemy">${enemies.map(row).join("")}</div>
+      <div class="sp-team ally">${allies.map(row).join("")}</div>
+    </div>`;
+}
+
+// One listener for every spell button, since the game view is redrawn on each update.
+app.addEventListener("click", async (e) => {
+  const btn = e.target.closest?.("[data-spell]");
+  if (!btn) return;
+  const undo = btn.dataset.used === "1";
+  btn.dataset.used = undo ? "" : "1";
+  btn.classList.toggle("down", !undo);
+  try {
+    await fetch("/api/spells", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ player: btn.dataset.spell, slot: btn.dataset.slot, at: undo ? null : currentGameTime() }),
+    });
+  } catch { /* the next update shows the real state */ }
+});
+
 function tickCountdowns() {
   if (!liveClock.at) return;
   const now = liveClock.gameTime + (Date.now() - liveClock.at) / 1000;
   document.querySelectorAll?.("[data-at]").forEach((el) => {
     const left = Number(el.dataset.at) - now;
-    if (el.dataset.up) el.textContent = left > 0 ? clock(left) : "up";
+    if (el.dataset.up !== undefined) {
+      el.textContent = left > 0 ? clock(left) : el.dataset.up;
+      el.closest?.(".sp")?.classList.toggle("down", left > 0);
+    }
     else el.textContent = `${Math.max(0, Math.ceil(left))}s`;
   });
 }
@@ -461,6 +505,7 @@ function renderGame(s) {
         <div class="lead" style="${diff >= 0 ? `right:50%;width:${leadPct}%;background:var(--blue)` : `left:50%;width:${leadPct}%;background:var(--red)`}"></div><div class="mid"></div></div>
         <div class="legend">${diff === 0 ? "Even on item gold" : `${diff > 0 ? "Your team" : "Enemy team"} +${num(Math.abs(diff))} item gold`}</div></div>
       ${renderObjectives(g)}
+      ${renderSpells(g)}
     </div>
     <div class="grid game-grid">
       <div class="panel"><h2 style="color:var(--blue)">Your team</h2>${g.allies.map((p) => playerRow(p, null)).join("")}</div>

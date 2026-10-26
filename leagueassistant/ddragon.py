@@ -86,6 +86,10 @@ class DDragon:
     def _spell_data(self) -> dict[int, dict]:
         return {int(s["key"]): s for s in self._data("summoner")["data"].values()}
 
+    def spell_list(self) -> dict[int, dict]:
+        """Summoner spells by key, with id (SummonerFlash), name and cooldown."""
+        return self._spell_data
+
     @property
     def spells(self) -> dict[int, str]:
         return {sid: s["name"] for sid, s in self._spell_data.items()}

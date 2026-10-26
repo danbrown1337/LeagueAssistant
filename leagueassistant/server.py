@@ -63,6 +63,8 @@ class Hub:
         self.gamelog = gamelog
         self.prev_phase = "None"
         self.post_mode: dict | None = None  # mode of the game on the post game screen
+        self.spell_uses: dict[str, float] = {}  # "player|slot" -> game time it was marked used
+        self.last_game_time: float | None = None
         self.token = token
         self.min_games = min_games
         self.lock = asyncio.Lock()
@@ -132,9 +134,15 @@ class Hub:
             s["postGame"] = None
 
         if live:
-            s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg, mode), mode=mode)
+            t = (live.get("gameData") or {}).get("gameTime", 0)
+            if self.last_game_time is None or t + 30 < self.last_game_time:
+                self.spell_uses = {}  # a new game
+            self.last_game_time = t
+            s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg, mode), mode=mode,
+                                          spell_uses=self.spell_uses)
         elif s["phase"] != "InProgress":
             s["live"] = None
+            self.last_game_time = None
         if self.gamelog:
             self._log(snap, mode, dd)
             s["mmr"] = self.gamelog.mmr_summary()
@@ -176,6 +184,22 @@ class Hub:
         except LookupError:
             self.my_build = None
         return self.my_build
+
+    async def mark_spell(self, player: str, slot: str, at: float | None):
+        """Start (at = game time) or clear (at = None) a summoner spell timer, then update everyone."""
+        async with self.lock:
+            key = f"{player}|{slot}"
+            if at is None:
+                self.spell_uses.pop(key, None)
+            else:
+                self.spell_uses[key] = float(at)
+            live = self.state.get("live")
+            for p in (live or {}).get("spells", []):
+                if p["key"] == player:
+                    for sp in p["spells"]:
+                        if sp["slot"] == slot:
+                            sp["usedAt"] = self.spell_uses.get(key)
+        await self.broadcast()
 
     async def receive(self, snap: dict):
         async with self.lock:
@@ -241,6 +265,18 @@ def create_app() -> FastAPI:
     async def agent_in_browser():
         # Only the agent POSTs here; send people who open it in a browser to the dashboard.
         return RedirectResponse("/")
+
+    @app.post("/api/spells")
+    async def spells(request: Request):
+        # From the dashboard (phone or PC), so no agent token: it only starts or clears a timer.
+        body = await request.json()
+        player, slot, at = body.get("player"), body.get("slot"), body.get("at")
+        known = any(p["key"] == player and any(sp["slot"] == slot for sp in p["spells"])
+                    for p in (hub.state.get("live") or {}).get("spells", []))
+        if not known or (at is not None and not isinstance(at, (int, float))):
+            raise HTTPException(400, "Unknown player or spell")
+        await hub.mark_spell(player, slot, at)
+        return {"ok": True}
 
     @app.api_route("/api/state", methods=["GET", "HEAD"])
     async def state():
