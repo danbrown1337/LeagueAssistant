@@ -53,6 +53,17 @@ window. That takes a few seconds and never happens during champ select or a
 game. Keep the .exe in a folder you can write to (Downloads or Documents is
 fine; Program Files isn't). Add `--no-update` to turn this off.
 
+### Boots and the bot lane quest
+
+Since patch 26.1, completing the bot lane role quest opens a seventh item slot
+for boots, and the game's live data doesn't include it: boots moved there
+vanish, and boots bought into it never show up. The app keeps boots it has
+seen, works out boots bought into that slot from gold you spent on nothing
+visible (300 for Boots, 700 more for Swiftness, and so on), and shows a row
+of boots in the build panel so you can tap yours if it gets them wrong. The
+latest raw game data is saved every 30 seconds to `last-game-data.json` next
+to `games.jsonl`, for checking what the game reports.
+
 ### Game log
 
 Every finished game is saved as one line of JSON in

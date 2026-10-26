@@ -388,6 +388,23 @@ function currentGameTime() {
   return liveClock.at ? liveClock.gameTime + (Date.now() - liveClock.at) / 1000 : 0;
 }
 
+// The bot lane quest's boots slot isn't in the game's data, so say what we think is there and let you fix it.
+function renderBootsSlot(g) {
+  const b = g.boots;
+  if (!b || b.source === "seen" && g.me?.items.some((i) => i.id === b.id && i.slot !== "boots")) return "";
+  if (!b.id && g.gameTime < 300) return "";  // nothing to ask about in the first minutes
+  const current = b.id ? b.choices.find((c) => c.id === b.id) || { id: b.id, name: "boots" } : null;
+  const how = { gold: "worked out from your gold", you: "set by you", seen: "seen earlier, now in the quest slot" }[b.source] || "";
+  return `
+    <div class="boots-slot">
+      <div class="muted" style="font-size:12px">${current
+        ? `Boots slot: <b>${esc(current.name)}</b> (${esc(how)}). Wrong? Tap the right ones.`
+        : "Bought boots into the bot lane quest's boots slot? The game doesn't show that slot, so tap yours:"}</div>
+      <div class="item-row" style="margin-top:6px">${b.choices.map((c) => `<button class="boot-pick ${c.id === b.id ? "on" : ""}" data-boots="${c.id}" title="${esc(c.name)}">${icon(c, "sm")}</button>`).join("")}
+        ${b.id ? '<button class="boot-pick clear" data-boots="" title="No boots">×</button>' : ""}</div>
+    </div>`;
+}
+
 function renderSpells(g) {
   if (!g.spells?.length) return "";
   const now = currentGameTime();
@@ -412,6 +429,14 @@ function renderSpells(g) {
 
 // One listener for every spell button, since the game view is redrawn on each update.
 app.addEventListener("click", async (e) => {
+  const pick = e.target.closest?.("[data-boots]");
+  if (pick) {
+    try {
+      await fetch("/api/boots", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: pick.dataset.boots ? Number(pick.dataset.boots) : null }) });
+    } catch { /* the next update shows the real state */ }
+    return;
+  }
   const btn = e.target.closest?.("[data-spell]");
   if (!btn) return;
   const undo = btn.dataset.used === "1";
@@ -478,6 +503,7 @@ function renderGame(s) {
         ${startCard ? nextCard.replace("BUY NEXT", "THEN") : nextCard}
         ${situational}
         ${g.build.starting?.length ? `<h3>Starting items</h3><div class="item-row" style="margin:6px 0 12px">${g.build.starting.map((i) => icon(i)).join("")}</div>` : ""}
+        ${renderBootsSlot(g)}
         <h3>Core</h3><div class="item-row" style="margin:6px 0 12px">${g.buildProgress.map((i) => `<span class="owned ${i.owned ? "have" : ""}">${icon(i)}</span>`).join('<span class="arrow">›</span>')}</div>
         <h3>Later options</h3>${g.build.later.map((slot, i) => `<div class="item-row" style="margin-top:6px"><span class="slot-label">${i + 4}</span>${slot.map((o) => `<div class="opt">${icon(o, "sm")}<span class="p">${pct(o.winRate)}</span></div>`).join("")}</div>`).join("")}
         <h3 style="margin-top:12px">Skills</h3><div class="prio" style="margin-top:6px">${g.build.skills.priority.map((k) => `<span class="key">${k}</span>`).join('<span class="arrow">›</span>')}</div>

@@ -265,3 +265,69 @@ def test_summoner_spell_timers(monkeypatch):
     post(20)
     foe = next(p for p in client.get("/api/state").json()["live"]["spells"] if not p["ally"])
     assert foe["spells"][1]["usedAt"] is None
+
+
+class BootsDD(FakeDDragon):
+    def item(self, iid):
+        return {3009: {"name": "Boots of Swiftness", "tags": ["Boots"], "gold": {"total": 1000}}}.get(iid, {})
+
+
+def test_boots_are_kept_after_the_quest_slot_hides_them(monkeypatch):
+    client, hub = make_client(monkeypatch)
+    monkeypatch.setattr(hub.stats, "get", lambda: (BootsDD(), FakeUGG("16.19")))
+    post = lambda t, items: client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress",
+                                                            "live": spell_game(t, items)}, headers=AUTH)
+    my_items = lambda: [i["id"] for i in client.get("/api/state").json()["live"]["me"]["items"]]
+    post(600, [3009])
+    assert my_items() == [3009]
+    post(900, [])            # quest done: the game stops listing the boots
+    assert my_items() == [3009]
+    post(20, [])             # a new game starts without them
+    assert my_items() == []
+
+
+class ShopDD(FakeDDragon):
+    ITEMS = {
+        1001: {"name": "Boots", "tags": ["Boots"], "gold": {"total": 300, "base": 300, "purchasable": True}, "maps": {"11": True}},
+        3009: {"name": "Boots of Swiftness", "tags": ["Boots"], "from": ["1001"],
+               "gold": {"total": 1000, "base": 700, "purchasable": True}, "maps": {"11": True}},
+        3006: {"name": "Berserker's Greaves", "tags": ["Boots"], "from": ["1001"],
+               "gold": {"total": 1100, "base": 800, "purchasable": True}, "maps": {"11": True}},
+        1036: {"name": "Long Sword", "tags": ["Damage"], "gold": {"total": 350, "base": 350, "purchasable": True}, "maps": {"11": True}},
+    }
+
+    def item(self, iid):
+        return self.ITEMS.get(iid, {})
+
+    def all_items(self):
+        return self.ITEMS
+
+    def item_cost(self, iid):
+        return self.ITEMS.get(iid, {}).get("gold", {}).get("total", 0)
+
+    def item_name(self, iid):
+        return self.ITEMS.get(iid, {}).get("name", f"#{iid}")
+
+
+def test_quest_slot_boots_are_worked_out_from_gold(monkeypatch):
+    client, hub = make_client(monkeypatch)
+    monkeypatch.setattr(hub.stats, "get", lambda: (ShopDD(), FakeUGG("16.19")))
+
+    def post(t, gold, items=()):
+        g = spell_game(t, items)
+        g["activePlayer"]["currentGold"] = gold
+        client.post("/api/agent", json={"clientConnected": True, "phase": "InProgress", "live": g}, headers=AUTH)
+        return client.get("/api/state").json()["live"]
+
+    post(600, 1400)
+    post(602, 1100)                     # 300 gone, nothing new to see: plain Boots into the boots slot
+    live = post(604, 1050, [1036])      # a visible Long Sword (350) shouldn't count as boots
+    assert live["boots"] == {**live["boots"], "id": 1001, "source": "gold"}
+    live = post(700, 350)               # 700 gone: Boots upgraded to Swiftness in that slot
+    assert live["boots"]["id"] == 3009
+    assert 3009 in [i["id"] for i in live["me"]["items"]]
+
+    # You can correct it from the dashboard.
+    assert client.post("/api/boots", json={"id": 3006}).status_code == 200
+    assert post(702, 360)["boots"] == {**post(702, 360)["boots"], "id": 3006, "source": "you"}
+    assert client.post("/api/boots", json={"id": 1036}).status_code == 400  # not boots

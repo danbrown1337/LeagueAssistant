@@ -238,6 +238,12 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .down-n { font-weight: 600; color: var(--red); }
 .down-p { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .down b { color: var(--text); }
+.boots-slot { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--line-gold); }
+.boots-slot b { color: var(--gold-hi); }
+.boot-pick { padding: 0; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); }
+.boot-pick .icon { width: 100%; height: 100%; border: 0; }
+.boot-pick.on { border-color: var(--gold); box-shadow: 0 0 8px rgba(200,170,110,.5); }
+.boot-pick.clear { color: var(--muted); font-size: 16px; line-height: 1; }
 .spells { margin-top: 12px; display: grid; gap: 6px; }
 .sp-head { font-size: 12px; }
 .sp-team { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px; border-radius: 8px; }
@@ -345,6 +351,12 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 .down-n { font-weight: 600; color: var(--red); }
 .down-p { display: inline-flex; align-items: center; gap: 4px; font-variant-numeric: tabular-nums; }
 .down b { color: var(--text); }
+.boots-slot { margin: 0 0 12px; padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--line-gold); }
+.boots-slot b { color: var(--gold-hi); }
+.boot-pick { padding: 0; width: 30px; height: 30px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg-2); }
+.boot-pick .icon { width: 100%; height: 100%; border: 0; }
+.boot-pick.on { border-color: var(--gold); box-shadow: 0 0 8px rgba(200,170,110,.5); }
+.boot-pick.clear { color: var(--muted); font-size: 16px; line-height: 1; }
 .spells { margin-top: 12px; display: grid; gap: 6px; }
 .sp-head { font-size: 12px; }
 .sp-team { display: flex; flex-wrap: wrap; gap: 8px; padding: 6px; border-radius: 8px; }

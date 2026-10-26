@@ -64,6 +64,11 @@ class Hub:
         self.prev_phase = "None"
         self.post_mode: dict | None = None  # mode of the game on the post game screen
         self.spell_uses: dict[str, float] = {}  # "player|slot" -> game time it was marked used
+        self.my_boots: int | None = None  # your boots this game, kept when the quest slot hides them
+        self.boots_source: str | None = None  # seen, gold (worked out from your gold) or you (you set them)
+        self.prev_items: list[int] | None = None
+        self.prev_gold: float | None = None
+        self.debug_saved = 0.0
         self.last_game_time: float | None = None
         self.token = token
         self.min_games = min_games
@@ -137,9 +142,14 @@ class Hub:
             t = (live.get("gameData") or {}).get("gameTime", 0)
             if self.last_game_time is None or t + 30 < self.last_game_time:
                 self.spell_uses = {}  # a new game
+                self.my_boots = self.boots_source = self.prev_items = self.prev_gold = None
+            self._save_debug(live)  # as the game sent it
+            live = self._keep_boots(live, dd)
             self.last_game_time = t
             s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg, mode), mode=mode,
                                           spell_uses=self.spell_uses)
+            s["live"]["boots"] = {"id": self.my_boots, "source": self.boots_source,
+                                  "choices": self._boots_choices(dd)}
         elif s["phase"] != "InProgress":
             s["live"] = None
             self.last_game_time = None
@@ -184,6 +194,106 @@ class Hub:
         except LookupError:
             self.my_build = None
         return self.my_build
+
+    def _keep_boots(self, live: dict, dd: DDragon) -> dict:
+        """Your boots, including ones in the bot lane quest's boots slot, which the game doesn't list.
+
+        Patch 26.1's bot lane quest opens a seventh slot for boots, and the live data leaves it out:
+        boots moved there vanish, and boots bought into it never appear. So: boots once seen are kept;
+        gold spent on nothing visible that matches a boots price means boots (or an upgrade) went into
+        that slot; and you can set them yourself on the dashboard.
+        """
+        names = advisor._player_names(live.get("activePlayer") or {})
+        me = next((p for p in live.get("allPlayers") or [] if advisor._player_names(p) & names), None)
+        if not me:
+            return live
+        items = [dd.base_item(i.get("itemID") or 0) for i in me.get("items") or []
+                 if i.get("itemID") and "Trinket" not in dd.item(dd.base_item(i["itemID"])).get("tags", [])]
+        gold = (live.get("activePlayer") or {}).get("currentGold")
+        seen = [i for i in items if advisor.is_boots(i, dd)]
+        if seen:
+            self.my_boots, self.boots_source = seen[0], "seen"
+        elif self.prev_items is not None and gold is not None and self.prev_gold is not None:
+            unexplained = (self.prev_gold - gold) - self._visible_spend(self.prev_items, items, dd)
+            guess = self._boots_for_gold(unexplained, dd) if unexplained > 200 else None
+            if guess:
+                self.my_boots, self.boots_source = guess, "gold"
+        self.prev_items, self.prev_gold = items, gold
+        if seen or not self.my_boots:
+            return live
+        kept = {**me, "items": [*(me.get("items") or []), {"itemID": self.my_boots, "slot": "boots", "count": 1}]}
+        return {**live, "allPlayers": [kept if p is me else p for p in live["allPlayers"]]}
+
+    @staticmethod
+    def _visible_spend(before: list[int], after: list[int], dd: DDragon) -> int:
+        """Gold the items that appeared since the last update cost, given what you held before."""
+        from collections import Counter
+
+        from .itemizer import finish_cost
+
+        new = Counter(after) - Counter(before)
+        held = list(before)
+        total = 0
+        for iid in new.elements():
+            cost, used = finish_cost(iid, held, dd)
+            total += cost
+            for u in used:
+                if u in held:
+                    held.remove(u)
+        return total
+
+    def _boots_for_gold(self, spent: float, dd: DDragon) -> int | None:
+        """The boots (or boots upgrade) that cost about `spent`, preferring the ones in your build."""
+        from .itemizer import finish_cost
+
+        boots = [i for i, it in dd.all_items().items() if i < 10000 and advisor.is_boots(i, dd)
+                 and it.get("gold", {}).get("purchasable") and (it.get("maps", {}).get("11") or it.get("maps", {}).get("12"))]
+        held = [self.my_boots] if self.my_boots else []
+        options = []
+        for b in boots:
+            if b == self.my_boots:
+                continue
+            cost, used = finish_cost(b, held, dd)
+            if held and not used:
+                continue  # not an upgrade of the boots you have
+            if abs(cost - spent) <= 40:
+                options.append((b, abs(cost - spent)))
+        if not options:
+            return None
+        build = self.my_build or {}
+        preferred = [i["id"] for i in build.get("core", [])] + [o["id"] for o in build.get("bootsOptions", [])]
+        options.sort(key=lambda o: (o[0] not in preferred, preferred.index(o[0]) if o[0] in preferred else 0, o[1]))
+        return options[0][0]
+
+    def _boots_choices(self, dd: DDragon) -> list[dict]:
+        """Boots to pick from on the dashboard: your build's first, then the other common pairs."""
+        build = self.my_build or {}
+        ids = [i["id"] for i in build.get("core", []) if advisor.is_boots(i["id"], dd)]
+        ids += [o["id"] for o in build.get("bootsOptions", [])]
+        ids += [1001, 3006, 3009, 3020, 3047, 3111, 3158, 3008]
+        out, seen = [], set()
+        for i in ids:
+            if i not in seen and dd.item(i):
+                seen.add(i)
+                out.append(advisor.item_ref(i, dd))
+        return out
+
+    async def set_boots(self, iid: int | None):
+        async with self.lock:
+            self.my_boots, self.boots_source = iid, ("you" if iid else None)
+        await self.broadcast()
+
+    def _save_debug(self, live: dict):
+        """The latest raw game data, every 30 seconds, for checking what the game reports."""
+        if not self.gamelog or time.time() - self.debug_saved < 30:
+            return
+        self.debug_saved = time.time()
+        try:
+            path = self.gamelog.path.parent / "last-game-data.json"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(live, indent=1), encoding="utf-8")
+        except OSError:
+            pass
 
     async def mark_spell(self, player: str, slot: str, at: float | None):
         """Start (at = game time) or clear (at = None) a summoner spell timer, then update everyone."""
@@ -265,6 +375,16 @@ def create_app() -> FastAPI:
     async def agent_in_browser():
         # Only the agent POSTs here; send people who open it in a browser to the dashboard.
         return RedirectResponse("/")
+
+    @app.post("/api/boots")
+    async def boots(request: Request):
+        # From the dashboard: the boots in your quest slot, which the game doesn't report.
+        iid = (await request.json()).get("id")
+        dd, _ = stats.get()
+        if iid is not None and not (isinstance(iid, int) and advisor.is_boots(iid, dd)):
+            raise HTTPException(400, "Not boots")
+        await hub.set_boots(iid)
+        return {"ok": True}
 
     @app.post("/api/spells")
     async def spells(request: Request):
