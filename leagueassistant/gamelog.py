@@ -105,6 +105,8 @@ class Recording:
                 "threats": [c["label"] for c in advice.get("threats", [])],
                 "gold": live.get("gold", 0),
                 "items": sorted(items),
+                # Where the game reports each item: boots move to their own slot after the bot lane quest.
+                "slots": {str(i["id"]): i.get("slot") for i in me.get("items", [])},
             })
         if nxt:
             self.last_advice = {"key": key, "next": nxt["id"], "situational": situational}

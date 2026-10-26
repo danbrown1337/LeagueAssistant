@@ -337,7 +337,8 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
             "dead": p.get("isDead", False), "respawn": round(p.get("respawnTimer", 0)),
             # Every item but the trinket. Not "slots 0-5": boots sit outside those six slots now,
             # and skipping them made the app think you never bought boots.
-            "items": [item_ref(i["itemID"], dd) for i in items if "Trinket" not in dd.item(i["itemID"]).get("tags", [])],
+            "items": [{**item_ref(i["itemID"], dd), "slot": i.get("slot")} for i in items
+                      if "Trinket" not in dd.item(i["itemID"]).get("tags", [])],
             "itemGold": sum((i.get("price") or dd.item_cost(i["itemID"])) * i.get("count", 1) for i in items),
         })
 
