@@ -118,3 +118,21 @@ def test_mmr_estimate_uses_the_last_ten_games(tmp_path):
         gl.post_game({**POST_RAW, "gameId": n}, post_view(0.0 if n < 2 else 20.0, 5), ARAM, DD)
     est = gl.mmr_estimate(ARAM)
     assert est["games"] == 10 and est["value"] == 20.0
+
+
+def test_given_items_arent_purchases_and_the_start_counts_as_following(tmp_path):
+    from tests import test_itemizer
+
+    test_itemizer.ITEMS[40] = {"name": "Biscuit", "tags": [], "gold": {"total": 50, "purchasable": False}, "consumed": True}
+    try:
+        gl = GameLog(tmp_path / "games.jsonl")
+        start = live(5, [], 1)
+        start["build"]["starting"] = [{"id": 30}]
+        gl.live(start, 9, DD)
+        bought = live(20, [30], 1)
+        bought["build"]["starting"] = [{"id": 30}]
+        gl.live(bought, 9, DD)
+        gl.live({**live(130, [30, 40], 1), "build": bought["build"]}, 9, DD)
+        assert [(p["name"], p["followedAdvice"]) for p in gl.current.purchases] == [("Oblivion Orb", True)]
+    finally:
+        del test_itemizer.ITEMS[40]

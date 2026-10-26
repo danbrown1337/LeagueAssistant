@@ -43,9 +43,10 @@ def _item(iid: int, dd: DDragon) -> dict:
 
 
 def _is_real_item(iid: int, dd: DDragon) -> bool:
-    """Skip potions, wards and other consumables when tracking purchases."""
+    """Skip potions, wards and things you're given rather than buy (rune biscuits, Poro-Snax)."""
     it = dd.item(iid)
-    return bool(it) and "Consumable" not in it.get("tags", []) and "Trinket" not in it.get("tags", [])
+    return (bool(it) and "Consumable" not in it.get("tags", []) and "Trinket" not in it.get("tags", [])
+            and it.get("gold", {}).get("purchasable", True) and not it.get("consumed"))
 
 
 class Recording:
@@ -60,6 +61,7 @@ class Recording:
         self.seeded = False  # items seen once, so joining mid-game doesn't count them as purchases
         self.last_advice = None
         self.core: list[int] = []
+        self.starting: set[int] = set()
         self.me: dict | None = None
         self.mode: dict | None = None
         self.game_time = 0.0
@@ -72,6 +74,7 @@ class Recording:
         self.game_time, self.me, self.mode = t, me, live.get("mode")
         if live.get("build"):
             self.core = [i["id"] for i in live["build"].get("core", [])]
+            self.starting = {i["id"] for i in live["build"].get("starting", [])}
         advice = live.get("advice") or {}
         nxt = advice.get("next")
         situational = [p["id"] for p in advice.get("situational", [])]
@@ -85,7 +88,8 @@ class Recording:
                 last = self.last_advice or {}
                 advised = [last.get("next"), *last.get("situational", [])]
                 parts = {int(p) for a in advised if a for p in dd.item(a).get("from", [])}
-                followed = iid in advised or iid in parts
+                # The starting items count too: at the start, buying them is following the build.
+                followed = iid in advised or iid in parts or (t < 5 * 60 and iid in self.starting)
                 self.purchases.append({**_item(iid, dd), "t": t, "followedAdvice": followed,
                                        "advised": _item(last["next"], dd) if last.get("next") else None})
         self.items, self.seeded = items, True
@@ -158,7 +162,9 @@ class GameLog:
         me = next((p for p in mine.get("players", []) if p.get("me")), {})
         raw_me = next((p for t in raw.get("teams") or [] for p in t.get("players") or []
                        if p.get("puuid") and p.get("puuid") == (raw.get("localPlayer") or {}).get("puuid")), {})
-        items = [i for i in raw_me.get("items") or [] if i] or sorted(rec.items if rec else [])
+        items = [i for i in raw_me.get("items") or [] if i]
+        # The post game list has six slots plus the trinket and leaves boots out; add any we saw.
+        items += [i for i in sorted(rec.items if rec else []) if i not in items]
         self._write({
             "gameId": game_id,
             "source": "post game",

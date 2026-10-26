@@ -327,3 +327,32 @@ def test_finish_cost_uses_every_part_you_hold_once():
         assert itemizer.finish_cost(21, [], DD) == (1100, [])
     finally:
         del ITEMS[20], ITEMS[21]
+
+
+def test_boots_outside_the_six_item_slots_still_count():
+    from leagueassistant import advisor
+
+    class DD(DDWithRunes):
+        _champion_data = {1: {"id": "MissFortune"}}
+
+        def base_item(self, iid):
+            return iid
+
+        def champion_id(self, name):
+            raise KeyError(name)
+
+        def item(self, iid):
+            return {**ITEMS, 99: {"name": "Ward", "tags": ["Trinket"], "gold": {"total": 0}}}.get(iid, {})
+
+    build = {"champion": {"id": 1}, "role": "adc", "core": [{"id": 6}, {"id": 2}, {"id": 5}], "later": [], "starting": []}
+    game = {
+        "activePlayer": {"riotId": "Me#1", "riotIdGameName": "Me"},
+        "allPlayers": [{"championName": "MissFortune", "rawChampionName": "x_MissFortune", "riotId": "Me#1",
+                        "riotIdGameName": "Me", "team": "ORDER", "position": "BOTTOM", "scores": {},
+                        # Boots reported in a slot past the six item slots, ward in the trinket slot.
+                        "items": [{"itemID": 6, "slot": 0}, {"itemID": 99, "slot": 6}, {"itemID": 2, "slot": 7}]}],
+        "gameData": {"gameMode": "CLASSIC", "gameTime": 900},
+    }
+    v = advisor.live_view(game, DD(), my_build=build)
+    assert [i["id"] for i in v["me"]["items"]] == [6, 2]  # boots kept, ward left out
+    assert v["advice"]["next"]["name"] == "Lord Doms"
