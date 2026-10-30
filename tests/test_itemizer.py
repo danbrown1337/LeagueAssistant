@@ -65,6 +65,10 @@ class FakeDD:
     def spell_list(self):
         return {}
 
+    def upgraded_from(self, iid):
+        base = self.item(iid).get("specialRecipe")
+        return [base] if base else []
+
 
 DD = FakeDD()
 AP_BUILD = {"core": [{"id": 1}, {"id": 2}, {"id": 15}], "later": []}
@@ -377,3 +381,24 @@ def test_summoner_spell_haste_from_items():
         assert v[0]["spells"] == [{"slot": "summonerSpellOne", "name": "Flash", "icon": None, "cooldown": 273, "usedAt": 100}]
     finally:
         del ITEMS[50]
+
+
+def test_items_that_upgrade_in_game_still_count_as_bought():
+    # Like Manamune -> Muramana: the build lists the item you buy, you end up holding the upgrade.
+    ITEMS[60] = {**item("Manamune", 2900, ["Damage"], {"FlatPhysicalDamageMod": 35})}
+    ITEMS[61] = {**item("Muramana", 2900, ["Damage"], {"FlatPhysicalDamageMod": 35}), "specialRecipe": 60}
+    try:
+        build = {"core": [{"id": 60}, {"id": 6}], "later": []}
+        a = itemizer.advise({"id": 7, "items": [{"id": 61}]}, [enemy(7), enemy(8)], build, DD, game_time=1500)
+        assert a["next"]["name"] == "Infinity Edge"  # not "buy Manamune" again
+    finally:
+        del ITEMS[60], ITEMS[61]
+
+
+def test_upgraded_from_follows_the_whole_chain():
+    from leagueassistant.ddragon import DDragon
+
+    dd = DDragon(version="16.21.1")
+    dd.__dict__["_item_data"] = {3865: {"name": "World Atlas"}, 3866: {"name": "Runic Compass", "specialRecipe": 3865},
+                                 3867: {"name": "Bounty of Worlds", "specialRecipe": 3866}}
+    assert dd.upgraded_from(3867) == [3866, 3865] and dd.upgraded_from(3865) == []

@@ -70,6 +70,16 @@ class DDragon:
             return iid
         return self._base_ids.get(self._item_data.get(iid, {}).get("name"), iid)
 
+    def upgraded_from(self, iid: int) -> list[int]:
+        """Items this one turned from in game (Muramana <- Manamune, Bounty of Worlds <- Runic Compass <- World Atlas)."""
+        out, seen = [], {iid}
+        base = self._item_data.get(iid, {}).get("specialRecipe")
+        while base and base not in seen:
+            out.append(base)
+            seen.add(base)
+            base = self._item_data.get(base, {}).get("specialRecipe")
+        return out
+
     def item(self, iid: int) -> dict:
         return self._item_data.get(iid, {})
 

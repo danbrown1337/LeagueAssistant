@@ -375,7 +375,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
 
     progress = None
     if me and my_build:
-        owned = {i["id"] for i in me["items"]}
+        owned = itemizer.owned_with_upgrades((i["id"] for i in me["items"]), dd)
         # Any finished boots fill the build's boots slot; show the ones you bought.
         my_boots = next((i for i in me["items"] if itemizer.is_finished_boots(i["id"], dd)), None)
         progress = []

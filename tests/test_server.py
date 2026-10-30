@@ -40,6 +40,10 @@ class FakeDDragon:
     def base_item(self, iid):
         return iid
 
+    def upgraded_from(self, iid):
+        base = self.item(iid).get("specialRecipe")
+        return [base] if base else []
+
     def spell_list(self):
         return {4: {"id": "SummonerFlash", "name": "Flash", "cooldown": [300]},
                 14: {"id": "SummonerDot", "name": "Ignite", "cooldown": [180]}}

@@ -166,6 +166,18 @@ def _legendaries(dd: DDragon, game_map: str) -> dict[int, dict]:
     return out
 
 
+def owned_with_upgrades(item_ids, dd: DDragon) -> set[int]:
+    """What you own, counting items that upgraded in game as the item they came from too.
+
+    Manamune becomes Muramana once stacked and the item id changes; without this the build
+    would tell you to buy Manamune again.
+    """
+    out = set(item_ids)
+    for iid in list(out):
+        out.update(dd.upgraded_from(iid))
+    return out
+
+
 def is_boots(iid: int, dd: DDragon) -> bool:
     return "Boots" in dd.item(iid).get("tags", [])
 
@@ -236,7 +248,7 @@ def advise(me: dict, enemy_views: list[dict], build: dict, dd: DDragon, gold: in
            game_time: float = 0, aram: bool = False) -> dict:
     """What to buy next for this game, situational picks and the threats behind them."""
     game_map = MAP_ARAM if aram else MAP_SR
-    owned = {i["id"] for i in me.get("items", [])}
+    owned = owned_with_upgrades((i["id"] for i in me.get("items", [])), dd)
     has_boots = any(is_finished_boots(i, dd) for i in owned)  # you can only own one pair
     owned_parts = owned | {int(p) for i in owned for p in dd.item(i).get("from", [])}
     style = play_style(build, dd, dd.champion(me.get("id") or 0).get("tags", []))
