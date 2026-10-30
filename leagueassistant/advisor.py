@@ -324,7 +324,9 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     views = []
     for p in players:
         s = p.get("scores", {})
-        items = [{**i, "itemID": dd.base_item(i["itemID"])} for i in p.get("items", []) if i.get("itemID")]
+        # The game's own ids: U.gg's ARAM builds use ARAM's copies (Hubris is 126697 there, 6697 on the
+        # Rift), so swapping them for the standard id broke the match. Ownership checks match both.
+        items = [i for i in p.get("items", []) if i.get("itemID")]
         views.append({
             **(champ_ref(_live_champion_id(p, dd), dd) or {"name": p.get("championName")}),
             "player": p.get("riotIdGameName") or p.get("summonerName"),
@@ -377,7 +379,8 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     if me and my_build:
         owned = itemizer.owned_with_upgrades((i["id"] for i in me["items"]), dd)
         # Any finished boots fill the build's boots slot; show the ones you bought.
-        my_boots = next((i for i in me["items"] if itemizer.is_finished_boots(i["id"], dd)), None)
+        my_boots = next((i for i in me["items"] if itemizer.is_finished_boots(i["id"], dd)
+                         or itemizer.is_finished_boots(dd.base_item(i["id"]), dd)), None)
         progress = []
         for i in my_build["core"]:
             if is_boots(i["id"], dd) and my_boots and i["id"] not in owned:

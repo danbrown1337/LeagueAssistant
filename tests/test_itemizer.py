@@ -69,6 +69,9 @@ class FakeDD:
         base = self.item(iid).get("specialRecipe")
         return [base] if base else []
 
+    def base_item(self, iid):
+        return iid
+
 
 DD = FakeDD()
 AP_BUILD = {"core": [{"id": 1}, {"id": 2}, {"id": 15}], "later": []}
@@ -232,9 +235,8 @@ def test_any_boots_tick_the_boots_slot_and_aram_ids_count():
         "gameData": {"gameMode": "ARAM", "gameTime": 600},
     }
     v = advisor.live_view(game, DD(), my_build=build)
-    assert [i["id"] for i in v["me"]["items"]] == [6, 11]  # a map-specific copy of Steelcaps reads as Steelcaps
-    assert [(i["name"], i["owned"]) for i in v["buildProgress"]] == [("Infinity Edge", True), ("Steelcaps", True),
-                                                                               ("Lord Doms", False)]
+    assert [i["id"] for i in v["me"]["items"]] == [6, 22011]  # the game's own id is kept...
+    assert [i["owned"] for i in v["buildProgress"]] == [True, True, False]  # ...and still fills the boots slot
     assert v["advice"]["next"]["name"] == "Lord Doms"  # bought other boots, so it moves on
 
 
@@ -402,3 +404,20 @@ def test_upgraded_from_follows_the_whole_chain():
     dd.__dict__["_item_data"] = {3865: {"name": "World Atlas"}, 3866: {"name": "Runic Compass", "specialRecipe": 3865},
                                  3867: {"name": "Bounty of Worlds", "specialRecipe": 3866}}
     assert dd.upgraded_from(3867) == [3866, 3865] and dd.upgraded_from(3865) == []
+
+
+def test_aram_copy_of_an_item_matches_the_build():
+    # U.gg's ARAM build lists ARAM's Hubris (126697); the game reports the same id. A Rift build (6697) matches too.
+    ITEMS[126697] = {**item("Hubris", 2950, ["Damage"], {"FlatPhysicalDamageMod": 55})}
+    ITEMS[6697] = {**item("Hubris", 2800, ["Damage"], {"FlatPhysicalDamageMod": 55})}
+
+    class D(FakeDD):
+        def base_item(self, iid):
+            return 6697 if iid == 126697 else iid
+    try:
+        for listed in (126697, 6697):
+            build = {"core": [{"id": listed}, {"id": 6}], "later": []}
+            a = itemizer.advise({"id": 7, "items": [{"id": 126697}]}, [enemy(7), enemy(8)], build, D(), game_time=900, aram=True)
+            assert a["next"]["name"] == "Infinity Edge", listed
+    finally:
+        del ITEMS[126697], ITEMS[6697]

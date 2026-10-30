@@ -175,6 +175,9 @@ def owned_with_upgrades(item_ids, dd: DDragon) -> set[int]:
     out = set(item_ids)
     for iid in list(out):
         out.update(dd.upgraded_from(iid))
+        # A map's copy of an item (ARAM Hubris 126697) also counts as the standard one (6697), and the other
+        # way round, so a build listing either id matches.
+        out.add(dd.base_item(iid))
     return out
 
 
