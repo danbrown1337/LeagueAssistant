@@ -335,3 +335,19 @@ def test_quest_slot_boots_are_worked_out_from_gold(monkeypatch):
     assert client.post("/api/boots", json={"id": 3006}).status_code == 200
     assert post(702, 360)["boots"] == {**post(702, 360)["boots"], "id": 3006, "source": "you"}
     assert client.post("/api/boots", json={"id": 1036}).status_code == 400  # not boots
+
+
+def test_runes_are_sent_to_the_agent_once_locked(monkeypatch):
+    client, _ = make_client(monkeypatch)
+    from leagueassistant import advisor as adv
+    monkeypatch.setattr(adv, "rune_page", lambda build: {"name": "Ahri Mid", "primary": 8100, "sub": 8200, "perks": list(range(9))})
+
+    def snap(locked, applied=None):
+        return {"clientConnected": True, "phase": "ChampSelect", "runesApplied": applied, "champSelect": {
+            "localPlayerCellId": 0, "myTeam": [{"cellId": 0, "championId": AHRI, "assignedPosition": "middle"}],
+            "theirTeam": [], "actions": [[{"actorCellId": 0, "type": "pick", "completed": locked}]]}}
+
+    assert client.post("/api/agent", json=snap(False), headers=AUTH).json()["runes"] is None  # still hovering
+    assert client.post("/api/agent", json=snap(True), headers=AUTH).json()["runes"]["name"] == "Ahri Mid"
+    client.post("/api/agent", json=snap(True, {"ok": True, "name": "Ahri Mid", "note": "created"}), headers=AUTH)
+    assert client.get("/api/state").json()["champSelect"]["runesApplied"]["ok"]

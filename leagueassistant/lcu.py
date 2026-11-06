@@ -22,6 +22,7 @@ LOCKFILE_PATHS = [
     Path("/Applications/League of Legends.app/Contents/LoL/lockfile"),
 ]
 LIVE_CLIENT_URL = "https://127.0.0.1:2999/liveclientdata"
+RUNE_PAGE_PREFIX = "LA: "  # the rune page we own and reuse every game
 
 
 @dataclass
@@ -107,6 +108,38 @@ class LCU:
     def match_history(self, count: int = 10) -> list[dict]:
         data = self.get(f"/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex={count}")
         return (data or {}).get("games", {}).get("games", [])
+
+    def _write(self, method: str, path: str, body: dict | None = None):
+        r = self.session.request(method, self.base + path, json=body, timeout=5)
+        r.raise_for_status()
+        return r.json() if r.content else None
+
+    def set_rune_page(self, name: str, primary: int, sub: int, perks: list[int]) -> str:
+        """Make this the current rune page in the client. Returns what happened, for the dashboard.
+
+        Reuses our own page ("LA: ...") if there is one. Otherwise creates one, and if every page slot
+        is taken, replaces the current editable page, like other rune import tools.
+        """
+        pages = self.get("/lol-perks/v1/pages") or []
+        editable = [p for p in pages if p.get("isEditable") and p.get("isDeletable", True)]
+        body = {"name": RUNE_PAGE_PREFIX + name, "primaryStyleId": primary, "subStyleId": sub,
+                "selectedPerkIds": perks, "current": True}
+        ours = next((p for p in editable if (p.get("name") or "").startswith(RUNE_PAGE_PREFIX)), None)
+        if ours:
+            self._write("DELETE", f"/lol-perks/v1/pages/{ours['id']}")
+            self._write("POST", "/lol-perks/v1/pages", body)
+            return "updated"
+        try:
+            self._write("POST", "/lol-perks/v1/pages", body)
+            return "created"
+        except requests.HTTPError:
+            # Every page slot is taken: replace the page you have selected.
+            current = next((p for p in editable if p.get("current")), editable[0] if editable else None)
+            if not current:
+                raise
+            self._write("DELETE", f"/lol-perks/v1/pages/{current['id']}")
+            self._write("POST", "/lol-perks/v1/pages", body)
+            return f"replaced your page \"{current.get('name')}\""
 
     def end_of_game(self) -> dict | None:
         """The post-game scoreboard: both teams with each player's puuid, champion and stats."""

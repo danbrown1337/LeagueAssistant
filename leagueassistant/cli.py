@@ -66,7 +66,7 @@ def cmd_history(args):
 def cmd_agent(args):
     from .agent import Agent
 
-    Agent(args.server, token=args.token, lockfile=args.lockfile, interval=args.interval).run()
+    Agent(args.server, token=args.token, lockfile=args.lockfile, interval=args.interval, runes=args.runes).run()
 
 
 def cmd_serve(args):
@@ -133,7 +133,7 @@ def cmd_local(args):
         print("Leave this window open. Close it or press Ctrl+C to stop.\n")
         if args.open and not just_updated:
             webbrowser.open(url)
-        Agent(url, token=token, lockfile=args.lockfile, interval=args.interval).run()
+        Agent(url, token=token, lockfile=args.lockfile, interval=args.interval, runes=args.runes).run()
 
     threading.Thread(target=run_agent, daemon=True).start()
     if auto_update:
@@ -166,6 +166,7 @@ def main(argv=None):
                    help="Server URL, e.g. http://homelab:8080")
     a.add_argument("--token", default=os.environ.get("AGENT_TOKEN"), help="Must match AGENT_TOKEN on the server")
     a.add_argument("--interval", type=float, default=2.0, help="Seconds between updates")
+    a.add_argument("--no-runes", dest="runes", action="store_false", help="Don't import U.gg's runes in champ select")
     a.set_defaults(func=cmd_agent)
 
     lo = sub.add_parser("local", help="Run the server and agent together on the gaming PC")
@@ -175,6 +176,7 @@ def main(argv=None):
     lo.add_argument("--interval", type=float, default=2.0, help="Seconds between updates")
     lo.add_argument("--no-browser", dest="open", action="store_false", help="Don't open the dashboard on start")
     lo.add_argument("--no-log", dest="log", action="store_false", help="Don't save finished games to games.jsonl")
+    lo.add_argument("--no-runes", dest="runes", action="store_false", help="Don't import U.gg's runes in champ select")
     lo.add_argument("--no-update", dest="update", action="store_false",
                     help="Don't install new versions from GitHub automatically (the .exe only)")
     lo.set_defaults(func=cmd_local)

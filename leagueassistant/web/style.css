@@ -171,6 +171,10 @@ button:hover { box-shadow: 0 0 12px rgba(200,170,110,.35); }
 /* ARAM champ select */
 .versus.aram { grid-template-columns: 1fr; }
 .versus.aram .vs-side { min-height: 150px; }
+.runes-status { margin-top: 12px; font-size: 13px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--line); }
+.runes-status.ok { border-color: var(--win); color: var(--text); }
+.runes-status.ok b { color: var(--gold-hi); }
+.runes-status.bad { border-color: var(--red); color: var(--red); }
 .aram-opt { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px; border-radius: 8px; }
 .aram-opt + .aram-opt { margin-top: 4px; }
 .aram-opt.you { background: rgba(200,170,110,.08); outline: 1px solid var(--line-gold); }

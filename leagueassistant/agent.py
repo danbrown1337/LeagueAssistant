@@ -25,7 +25,7 @@ POST_GAME_PHASES = {"PreEndOfGame", "EndOfGame"}
 
 class Agent:
     def __init__(self, server: str, token: str | None = None, lockfile: str | None = None,
-                 interval: float = 2.0):
+                 interval: float = 2.0, runes: bool = True):
         self.url = server.rstrip("/") + "/api/agent"
         self.lockfile = lockfile
         self.interval = interval
@@ -39,6 +39,10 @@ class Agent:
         self.history_due = 0.0
         self.post_game: dict | None = None
         self.queue: dict | None = None
+        self.import_runes = runes  # write the server's rune page to the client in champ select
+        self.runes_key: str | None = None
+        self.runes_status: dict | None = None
+        self.runes_retry_at = 0.0
         self.last_hash = None
         self.last_sent = 0.0
 
@@ -72,6 +76,8 @@ class Agent:
         snap = {"clientConnected": True, "phase": phase}
         if phase != self.last_phase:
             self.queue = self.client.queue() if phase != "None" else None
+            if phase != "ChampSelect":
+                self.runes_key = self.runes_status = None  # import again next champ select
             if phase == "ChampSelect":
                 self.pickable = sorted(self.client.pickable_champions())
             if phase in HISTORY_PHASES:
@@ -92,6 +98,8 @@ class Agent:
         if phase == "ChampSelect":
             snap["champSelect"] = self.client.champ_select()
             snap["pickable"] = self.pickable
+            if self.runes_status:
+                snap["runesApplied"] = self.runes_status
         elif phase in ("InProgress", "Reconnect"):
             snap["live"] = lcu.live_game()
         elif phase in POST_GAME_PHASES:
@@ -132,6 +140,27 @@ class Agent:
             raise SystemExit("The server rejected the agent token. Check --token / AGENT_TOKEN.")
         r.raise_for_status()
         self.last_hash, self.last_sent = digest, time.time()
+        try:
+            page = (r.json() or {}).get("runes")
+        except ValueError:
+            page = None
+        if page and self.import_runes and self.client and self.last_phase == "ChampSelect":
+            self._apply_runes(page)
+
+    def _apply_runes(self, page: dict):
+        """Write the rune page the server picked, once per page (again if your champion changes)."""
+        key = json.dumps(page, sort_keys=True)
+        if key == self.runes_key or time.time() < self.runes_retry_at:
+            return
+        try:
+            what = self.client.set_rune_page(page["name"], page["primary"], page["sub"], page["perks"])
+            self.runes_key = key
+            self.runes_status = {"ok": True, "name": page["name"], "note": what}
+            log.info("Rune page %s: %s", page["name"], what)
+        except (requests.RequestException, KeyError) as e:
+            self.runes_retry_at = time.time() + 10
+            self.runes_status = {"ok": False, "name": page.get("name"), "note": str(e)[:200]}
+            log.warning("Couldn't import runes: %s", e)
 
     def run(self):
         log.info("Sending League client data to %s", self.url)

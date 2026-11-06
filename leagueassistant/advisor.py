@@ -85,6 +85,7 @@ def build_view(b: Build, dd: DDragon) -> dict:
             "primary": tree(b.rune_trees[0]),
             "secondary": tree(b.rune_trees[1]),
             "shards": [dd.runes.get(s, str(s)) for s in b.shards],
+            "shardIds": list(b.shards),
         },
         "spells": [{"id": s, "name": dd.spells.get(s, str(s)), "icon": dd.spell_icon(s)} for s in b.spells],
         "starting": [item_ref(i, dd) for i in b.starting_items],
@@ -169,6 +170,17 @@ def augments_view(champion_id: int, ugg: UGG) -> dict | None:
         return ugg.mayhem_augments(champion_id)
     except (LookupError, requests.RequestException, ValueError):
         return None
+
+
+def rune_page(build: dict) -> dict | None:
+    """The rune page for the client: primary and secondary trees, then 6 runes and 3 shards."""
+    r = build.get("runes") or {}
+    primary, secondary = r.get("primary") or {}, r.get("secondary") or {}
+    perks = [x["id"] for x in primary.get("runes", [])] + [x["id"] for x in secondary.get("runes", [])] + list(r.get("shardIds", []))
+    if not primary.get("id") or not secondary.get("id") or len(perks) != 9:
+        return None
+    role = {"top": "Top", "jungle": "Jungle", "mid": "Mid", "adc": "Bot", "support": "Support", "aram": "ARAM"}.get(build.get("role"), "")
+    return {"name": f"{build['champion']['name']} {role}".strip(), "primary": primary["id"], "sub": secondary["id"], "perks": perks}
 
 
 def counter_views(picks: list[Matchup], dd: DDragon) -> list[dict]:

@@ -106,9 +106,14 @@ Add these to the shortcut's target or the command line:
 | `--no-browser` | opens the browser | |
 | `--no-update` | updates itself | |
 | `--no-log` | saves finished games | |
+| `--no-runes` | imports runes in champ select | |
 
-The app only reads data from the League client and the in-game API. It never
-sends input to the game.
+The app reads data from the League client and the in-game API. The one thing
+it writes is your rune page: in champ select it imports U.gg's runes into the
+client as a page named "LA: <champion> <role>", after you lock in (in ARAM, once
+you have your champion). It reuses that page every game; if all your page slots
+are full and it has no page yet, it replaces your currently selected page once.
+Add `--no-runes` to turn this off. It never sends input to the game itself.
 
 ## Running the server on a home lab instead
 

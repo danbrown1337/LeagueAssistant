@@ -156,3 +156,92 @@ def test_mayhem_is_aram_with_augments():
     assert (m["kind"], m["label"], m["mayhem"]) == ("aram", "ARAM: Mayhem", True)
     assert advisor.game_mode({"id": 9999, "gameMode": "ARAM", "description": "ARAM: Mayhem"})["mayhem"]
     assert not advisor.game_mode({"id": 450, "gameMode": "ARAM"})["mayhem"]
+
+
+class FakeResponse:
+    def __init__(self, status=200, body=None):
+        self.status_code, self._body = status, body
+        self.content = b"x" if body is not None else b""
+
+    def json(self):
+        return self._body
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"{self.status_code}")
+
+
+class FakeSession:
+    def __init__(self, pages, post_fails=False):
+        self.pages, self.post_fails, self.calls = pages, post_fails, []
+
+    def get(self, url, timeout=5):
+        return FakeResponse(200, self.pages)
+
+    def request(self, method, url, json=None, timeout=5):
+        self.calls.append((method, url.split("/lol-perks/v1/")[1], json and json["name"]))
+        if method == "POST" and self.post_fails and len([c for c in self.calls if c[0] == "POST"]) == 1:
+            return FakeResponse(400, {"message": "Max pages reached"})
+        return FakeResponse(200, {})
+
+
+def rune_client(pages, post_fails=False):
+    c = lcu.LCU(lcu.Credentials(1, "x"))
+    c.session = FakeSession(pages, post_fails)
+    return c
+
+
+def test_rune_page_reuses_ours_creates_or_replaces_the_current():
+    mine = {"id": 7, "name": "LA: Ahri Mid", "isEditable": True, "isDeletable": True}
+    theirs = {"id": 3, "name": "My page", "isEditable": True, "isDeletable": True, "current": True}
+    c = rune_client([theirs, mine])
+    assert c.set_rune_page("Jinx Bot", 8000, 8100, list(range(9))) == "updated"
+    assert c.session.calls == [("DELETE", "pages/7", None), ("POST", "pages", "LA: Jinx Bot")]
+
+    c = rune_client([theirs])
+    assert c.set_rune_page("Jinx Bot", 8000, 8100, list(range(9))) == "created"
+
+    c = rune_client([theirs], post_fails=True)  # every slot taken
+    assert c.set_rune_page("Jinx Bot", 8000, 8100, list(range(9))) == 'replaced your page "My page"'
+    assert ("DELETE", "pages/3", None) in c.session.calls
+
+
+def test_rune_page_from_build():
+    build = {"champion": {"name": "Ahri"}, "role": "mid", "runes": {
+        "primary": {"id": 8100, "runes": [{"id": i} for i in (8112, 8126, 8138, 8135)]},
+        "secondary": {"id": 8200, "runes": [{"id": 8226}, {"id": 8210}]}, "shardIds": [5008, 5008, 5001]}}
+    assert advisor.rune_page(build) == {"name": "Ahri Mid", "primary": 8100, "sub": 8200,
+                                        "perks": [8112, 8126, 8138, 8135, 8226, 8210, 5008, 5008, 5001]}
+    assert advisor.rune_page({**build, "runes": {**build["runes"], "shardIds": []}}) is None
+
+
+def test_agent_imports_each_rune_page_once_and_retries_failures(monkeypatch):
+    from leagueassistant import agent as agent_mod
+
+    calls = []
+
+    class Client:
+        fail = True
+
+        def set_rune_page(self, name, primary, sub, perks):
+            calls.append(name)
+            if Client.fail:
+                import requests
+                raise requests.HTTPError("500")
+            return "created"
+
+    a = agent_mod.Agent("http://x", runes=True)
+    a.client = Client()
+    page = {"name": "Ahri Mid", "primary": 8100, "sub": 8200, "perks": list(range(9))}
+    a._apply_runes(page)
+    assert a.runes_status["ok"] is False
+    a._apply_runes(page)                      # no retry inside 10 seconds
+    assert calls == ["Ahri Mid"]
+    a.runes_retry_at = 0
+    Client.fail = False
+    a._apply_runes(page)
+    a._apply_runes(page)                      # same page: not written again
+    assert calls == ["Ahri Mid", "Ahri Mid"] and a.runes_status == {"ok": True, "name": "Ahri Mid", "note": "created"}
+    a._apply_runes({**page, "name": "Jinx Bot"})  # champion changed: written again
+    assert calls[-1] == "Jinx Bot"

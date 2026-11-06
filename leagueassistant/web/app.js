@@ -237,6 +237,15 @@ async function setupLookup() {
 
 // ---------- Champ select ----------
 
+function renderRunesStatus(cs) {
+  if (!cs.build) return "";
+  const r = cs.runesApplied;
+  if (r?.ok) return `<div class="runes-status ok">✓ Runes imported to your client as <b>LA: ${esc(r.name)}</b>${r.note && r.note.startsWith("replaced") ? ` (${esc(r.note)})` : ""}.</div>`;
+  if (r && !r.ok) return `<div class="runes-status bad">Couldn't import runes: ${esc(r.note)}. Retrying…</div>`;
+  const aram = cs.mode?.kind === "aram";
+  return `<div class="runes-status muted">${aram ? "Importing runes…" : "Runes import to your client when you lock in."}</div>`;
+}
+
 function renderTimer(cs) {
   return `<div class="timer"><span class="label">${esc({ BAN_PICK: "Pick & ban", PLANNING: "Declare intent", FINALIZATION: "Finalize" }[cs.timer.phase] || "Champ select")}</span>
       <div class="bar"><div class="fill" id="timer-fill"></div></div><span class="secs" id="timer-secs"></span></div>`;
@@ -286,6 +295,7 @@ function renderNoLanesChampSelect(s) {
       </div>
       <div class="panel"><h2>Bench</h2>${cs.bench?.length ? `<div class="bench">${cs.bench.map((b) => icon(b)).join("")}</div>` : '<div class="muted">Empty. Rerolled champions land here.</div>'}</div>
     </div>
+    ${renderRunesStatus(cs)}
     <div style="margin-top:16px">${cs.build ? renderBuild(cs.build) : ""}</div>`;
   tickTimer();
 }
@@ -335,6 +345,7 @@ function renderChampSelect(s) {
       </div>
       <div class="panel"><h2>Enemy team</h2>${enemies}</div>
     </div>
+    ${renderRunesStatus(cs)}
     <div style="margin-top:16px">${cs.build ? renderBuild(cs.build) : ""}</div>`;
   tickTimer();
 }

@@ -64,6 +64,7 @@ class Hub:
         self.prev_phase = "None"
         self.post_mode: dict | None = None  # mode of the game on the post game screen
         self.spell_uses: dict[str, float] = {}  # "player|slot" -> game time it was marked used
+        self.rune_page: dict | None = None  # sent back to the agent to import in champ select
         self.my_boots: int | None = None  # your boots this game, kept when the quest slot hides them
         self.boots_source: str | None = None  # seen, gold (worked out from your gold) or you (you set them)
         self.prev_items: list[int] | None = None
@@ -128,6 +129,14 @@ class Hub:
                                              "endsAt": int(time.time() * 1000) + state.time_left_ms}
         elif s["phase"] not in ("ChampSelect", "GameStart", "InProgress"):
             self.select_key = None
+
+        # Runes to import: once you've locked in (in ARAM, once you have a champion).
+        cs = s["champSelect"] if session else None
+        self.rune_page = None
+        if cs and cs.get("build") and (cs.get("locked") or (cs.get("mode") or {}).get("kind") == "aram"):
+            self.rune_page = advisor.rune_page(cs["build"])
+        if cs is not None:
+            cs["runesApplied"] = snap.get("runesApplied")
 
         # Kept after the post game screen closes, until the next champ select.
         post = snap.get("postGame")
@@ -369,7 +378,7 @@ def create_app() -> FastAPI:
         if hub.token and request.headers.get("authorization") != f"Bearer {hub.token}":
             raise HTTPException(401, "Bad agent token")
         await hub.receive(await request.json())
-        return {"ok": True}
+        return {"ok": True, "runes": hub.rune_page}
 
     @app.get("/api/agent", include_in_schema=False)
     async def agent_in_browser():
