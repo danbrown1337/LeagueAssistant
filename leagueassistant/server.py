@@ -257,6 +257,7 @@ class Hub:
 
         boots = [i for i, it in dd.all_items().items() if i < 10000 and advisor.is_boots(i, dd)
                  and it.get("gold", {}).get("purchasable") and (it.get("maps", {}).get("11") or it.get("maps", {}).get("12"))]
+        # (Standard ids only: other modes' copies of boots aren't sold in the normal shop.)
         held = [self.my_boots] if self.my_boots else []
         options = []
         for b in boots:

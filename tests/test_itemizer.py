@@ -421,3 +421,19 @@ def test_aram_copy_of_an_item_matches_the_build():
             assert a["next"]["name"] == "Infinity Edge", listed
     finally:
         del ITEMS[126697], ITEMS[6697]
+
+
+def test_other_modes_copies_are_never_suggested():
+    # Like 773005 Atma's Impaler: listed for ARAM in Data Dragon but from a retired item set, not the shop.
+    ITEMS[773005] = item("Atmas Impaler", 2300, ["Armor", "Damage", "CriticalStrike"],
+                         {"FlatArmorMod": 45, "FlatCritChanceMod": 0.18, "FlatPhysicalDamageMod": 10}, maps=("12",))
+    ITEMS[126697] = item("ARAM Hubris", 2950, ["Damage"], {"FlatPhysicalDamageMod": 55}, maps=("12",))
+    try:
+        assert 773005 not in itemizer._legendaries(DD, "12") and 773005 not in itemizer._legendaries(DD, "11")
+        assert 126697 in itemizer._legendaries(DD, "12") and 126697 not in itemizer._legendaries(DD, "11")
+        # An all-physical team still gets armor advice, just not from that item.
+        a = itemizer.advise({"id": 7, "items": [{"id": 6}]}, [enemy(6, [6], kills=8, deaths=1), enemy(7, [6])],
+                            ADC_BUILD, DD, game_time=1200, aram=True)
+        assert all(p["id"] != 773005 for p in [a["next"], *a["situational"]])
+    finally:
+        del ITEMS[773005], ITEMS[126697]

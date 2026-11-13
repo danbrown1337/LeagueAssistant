@@ -155,11 +155,23 @@ def fit(item: dict, style: str) -> float:
     return 1.0 + 0.5 * bool(st("FlatHPPoolMod"))
 
 
+def in_shop(iid: int, it: dict, game_map: str) -> bool:
+    """Whether the normal shop on this map sells the item.
+
+    Data Dragon also lists other modes' copies under bigger ids and marks some for these maps:
+    a retired item set (773005 Atma's Impaler, Ninja Tabi), Arena items (22xxxx) and others
+    (32xxxx, 66xxxx). Only standard items are in the shop, plus ARAM's own copies (126697 Hubris) in ARAM.
+    """
+    if not it.get("maps", {}).get(game_map):
+        return False
+    return iid < 10000 or (game_map == MAP_ARAM and 120000 <= iid < 130000)
+
+
 def _legendaries(dd: DDragon, game_map: str) -> dict[int, dict]:
     out = {}
     for iid, it in dd.all_items().items():
         g = it.get("gold", {})
-        if (g.get("purchasable") and it.get("maps", {}).get(game_map) and not it.get("into")
+        if (g.get("purchasable") and in_shop(iid, it, game_map) and not it.get("into")
                 and g.get("total", 0) >= 2000 and it.get("inStore", True) and not it.get("requiredChampion")
                 and "Boots" not in it.get("tags", []) and "Consumable" not in it.get("tags", [])):
             out[iid] = it
@@ -233,7 +245,7 @@ def finish_cost(iid: int, inventory: list[int], dd: DDragon) -> tuple[int, list[
 def _boots(dd: DDragon, game_map: str) -> dict[int, dict]:
     return {iid: it for iid, it in dd.all_items().items()
             if "Boots" in it.get("tags", []) and it.get("gold", {}).get("purchasable")
-            and it.get("maps", {}).get(game_map) and 900 <= it.get("gold", {}).get("total", 0) <= 1500}
+            and in_shop(iid, it, game_map) and 900 <= it.get("gold", {}).get("total", 0) <= 1500}
 
 
 # --- Advice -------------------------------------------------------------------
