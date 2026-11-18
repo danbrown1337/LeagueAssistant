@@ -137,7 +137,7 @@ def test_urgent_picks_wait_until_you_have_boots():
 
 
 def _fake_ugg(aram_core, sr_core, boots=None, role="adc"):
-    from leagueassistant.ugg import Build
+    from leagueassistant.stats import Build
 
     def build(core):
         return Build(1, role, 50, 100, (8100, 8200), [], [], [], [], core, [], [], "QWE")

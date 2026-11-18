@@ -196,7 +196,34 @@ leagueassistant history --riot-id "Name#TAG"  # needs RIOT_API_KEY
 | Live Client Data API (`:2999`) | In-game scoreboard and items | Only while a game is running |
 | U.gg (`stats2.u.gg`) | Builds, matchups, role play rates | Unofficial; the format can change without notice |
 | Data Dragon | Names and icons for champions, items, runes, spells | Official static data |
-| Riot API | Match history by Riot ID | Optional, needs a key from developer.riotgames.com |
+| Riot API | Match history by Riot ID; the match collector | Optional, needs a key from developer.riotgames.com |
+
+### Collecting our own stats
+
+U.gg's terms don't allow using its data in a product, so a version of the
+app that can be sold needs its own stats. `leagueassistant collect` starts
+that: it lists every player in Emerald and above on one server (refreshed
+daily), checks the least recently checked ones for new ranked solo, ARAM and
+ARAM: Mayhem games, and saves each match with its timeline to `matches.db`
+(SQLite): runes, spells, final items, the order items were bought in, skill
+order and augments for every player. Player names and IDs aren't saved with
+matches. It stays under the key's rate limits by itself. Nothing reads the
+database yet, so the dashboard still uses U.gg; `STATS_SOURCE` (default
+`ugg`) will choose between them once our own source is built.
+
+On the home lab it's the `collector` service, off by default. To turn it
+on, add this to `.env` and run `docker compose up -d`:
+
+```
+COMPOSE_PROFILES=collector
+RIOT_API_KEY=RGAPI-...
+RIOT_PLATFORM=na1           # optional: server to collect from
+```
+
+A development key expires every 24 hours. When `docker compose logs
+collector` says the key was rejected, put a new one in `.env` and run
+`docker compose up -d collector`. A production key lasts and allows far more
+requests; development keys collect roughly 15,000-20,000 matches a day.
 
 The in-game build starts from U.gg's core build. A situational item jumps
 ahead of it only for an urgent threat (heavy healing, three or more enemies

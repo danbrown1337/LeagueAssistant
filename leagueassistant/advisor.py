@@ -1,4 +1,4 @@
-"""Turns U.gg stats and League client state into views.
+"""Turns champion stats and League client state into views.
 
 The view functions return plain dicts (sent to the web UI as JSON). The
 format_* functions turn those into text for the terminal commands.
@@ -15,7 +15,7 @@ from .objectives import objectives_view
 from .spells import spells_view
 from .ddragon import DDragon
 from .lcu import ChampSelectState
-from .ugg import UGG, Build, Matchup
+from .stats import Build, Matchup, StatsSource
 
 LIVE_POSITIONS = {"TOP": "top", "JUNGLE": "jungle", "MIDDLE": "mid", "BOTTOM": "adc", "UTILITY": "support"}
 QUEUES = {
@@ -111,7 +111,7 @@ def _boots_position(cores: list, dd: DDragon) -> int:
     return round(sum(i * g for i, g in weighted) / total) if total else 1
 
 
-def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, aram: bool = False) -> dict:
+def full_build_view(champion_id: int, role: str | None, stats: StatsSource, dd: DDragon, aram: bool = False) -> dict:
     """The U.gg build, with boots filled in when the core has none.
 
     U.gg's overview file only has the most common 3-item core, which often
@@ -120,11 +120,11 @@ def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, a
     most common pair where its item orders usually put them. Champions that
     mostly skip boots (Yuumi) stay without.
     """
-    view = build_view(ugg.aram_build(champion_id) if aram else ugg.build(champion_id, role), dd)
+    view = build_view(stats.aram_build(champion_id) if aram else stats.build(champion_id, role), dd)
     if any(is_boots(i["id"], dd) for i in view["core"]):
         return view
     try:
-        choices, cores = ugg.boots(champion_id, None if aram else view["role"], aram=aram)
+        choices, cores = stats.boots(champion_id, None if aram else view["role"], aram=aram)
     except (LookupError, requests.RequestException):
         choices, cores = None, []
     if choices:
@@ -153,7 +153,7 @@ def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, a
     if aram:
         # No boots data: borrow the boots from the Summoner's Rift build.
         try:
-            sr = ugg.build(champion_id)
+            sr = stats.build(champion_id)
         except LookupError:
             return view
         for n, iid in enumerate(sr.core_items):
@@ -164,10 +164,10 @@ def full_build_view(champion_id: int, role: str | None, ugg: UGG, dd: DDragon, a
     return view
 
 
-def augments_view(champion_id: int, ugg: UGG) -> dict | None:
+def augments_view(champion_id: int, stats: StatsSource) -> dict | None:
     """U.gg's ARAM: Mayhem augment ranking for a champion, or None if it has none."""
     try:
-        return ugg.mayhem_augments(champion_id)
+        return stats.mayhem_augments(champion_id)
     except (LookupError, requests.RequestException, ValueError):
         return None
 
@@ -189,13 +189,13 @@ def counter_views(picks: list[Matchup], dd: DDragon) -> list[dict]:
 
 # --- Champ select ------------------------------------------------------------
 
-def champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon,
+def champ_select_view(state: ChampSelectState, stats: StatsSource, dd: DDragon,
                       pool: set[int] | None = None, min_matches: int = 100, mode: dict | None = None) -> dict:
     mode = mode or game_mode()
     if mode["kind"] != "sr":
-        return _no_lanes_champ_select_view(state, ugg, dd, mode)
-    my_role = state.my_role or (ugg.main_role(state.my_champion) if state.my_champion else None)
-    enemy_roles = ugg.assign_roles(state.enemies) if state.enemies else {}
+        return _no_lanes_champ_select_view(state, stats, dd, mode)
+    my_role = state.my_role or (stats.main_role(state.my_champion) if state.my_champion else None)
+    enemy_roles = stats.assign_roles(state.enemies) if state.enemies else {}
     role_of = {cid: role for role, cid in enemy_roles.items()}
     lane_enemy = enemy_roles.get(my_role) if my_role else None
 
@@ -220,15 +220,15 @@ def champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon,
         unavailable = set(state.bans) | set(state.enemies) | set(state.allies.values())
         available = (pool or set(dd.champions)) - unavailable
         try:
-            view["counters"] = counter_views(ugg.counters(lane_enemy, my_role, min_matches=min_matches, pool=available), dd)
+            view["counters"] = counter_views(stats.counters(lane_enemy, my_role, min_matches=min_matches, pool=available), dd)
         except LookupError as e:
             view["errors"].append(str(e))
 
     if state.my_champion:
         try:
-            view["build"] = full_build_view(state.my_champion, my_role, ugg, dd)
+            view["build"] = full_build_view(state.my_champion, my_role, stats, dd)
             if lane_enemy:
-                m = ugg.matchup(state.my_champion, lane_enemy, my_role)
+                m = stats.matchup(state.my_champion, lane_enemy, my_role)
                 if m and m.matches:
                     view["matchup"] = {"winRate": rate(m.wins, m.matches), "games": m.matches}
         except LookupError as e:
@@ -236,7 +236,7 @@ def champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon,
     return view
 
 
-def aram_options(champions: list[tuple[int, str]], ugg: UGG, dd: DDragon) -> list[dict]:
+def aram_options(champions: list[tuple[int, str]], stats: StatsSource, dd: DDragon) -> list[dict]:
     """ARAM win rates for the champions you could end up on, best first. `champions` is (id, source)."""
     out, seen = [], set()
     for cid, source in champions:
@@ -244,7 +244,7 @@ def aram_options(champions: list[tuple[int, str]], ugg: UGG, dd: DDragon) -> lis
             continue
         seen.add(cid)
         try:
-            b = ugg.aram_build(cid)
+            b = stats.aram_build(cid)
         except LookupError:
             continue
         out.append({**champ_ref(cid, dd), "source": source, "winRate": rate(b.wins, b.matches), "games": b.matches})
@@ -252,7 +252,7 @@ def aram_options(champions: list[tuple[int, str]], ugg: UGG, dd: DDragon) -> lis
     return out
 
 
-def _no_lanes_champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon, mode: dict) -> dict:
+def _no_lanes_champ_select_view(state: ChampSelectState, stats: StatsSource, dd: DDragon, mode: dict) -> dict:
     # ARAM and the other modes have no lanes, so no lane opponent or counters.
     view = {
         "myRole": None,
@@ -277,14 +277,14 @@ def _no_lanes_champ_select_view(state: ChampSelectState, ugg: UGG, dd: DDragon, 
         view["errors"].append(f"U.gg has no builds for {mode['label']}.")
         return view
     if state.my_champion and mode.get("mayhem"):
-        view["augments"] = augments_view(state.my_champion, ugg)
+        view["augments"] = augments_view(state.my_champion, stats)
     if state.my_champion:
         try:
-            view["build"] = full_build_view(state.my_champion, None, ugg, dd, aram=True)
+            view["build"] = full_build_view(state.my_champion, None, stats, dd, aram=True)
         except LookupError as e:
             view["errors"].append(str(e))
     team = [(p["champion"], "you" if p["me"] else "teammate") for p in state.my_team]
-    view["aramOptions"] = aram_options(sorted(team, key=lambda t: t[1] != "you") + [(c, "bench") for c in state.bench], ugg, dd)
+    view["aramOptions"] = aram_options(sorted(team, key=lambda t: t[1] != "you") + [(c, "bench") for c in state.bench], stats, dd)
     return view
 
 
@@ -325,7 +325,7 @@ def _objectives(events: list[dict], team_of: dict[str, str]) -> dict[str, dict[s
     return out
 
 
-def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | None = None,
+def live_view(game: dict, dd: DDragon, stats: StatsSource | None = None, my_build: dict | None = None,
               mode: dict | None = None, spell_uses: dict | None = None) -> dict:
     active = game.get("activePlayer", {})
     my_names = _player_names(active)
@@ -361,9 +361,9 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
     enemies = [v for v in views if not v["ally"]]
     mode = mode or game_mode(live=game)
     # Ranked games report positions; other Summoner's Rift games may not, so guess from U.gg.
-    if mode["kind"] == "sr" and ugg and enemies and not any(e["role"] for e in enemies) and len(enemies) == 5:
+    if mode["kind"] == "sr" and stats and enemies and not any(e["role"] for e in enemies) and len(enemies) == 5:
         try:
-            guess = ugg.assign_roles([e["id"] for e in enemies if e.get("id")])
+            guess = stats.assign_roles([e["id"] for e in enemies if e.get("id")])
             role_of = {cid: r for r, cid in guess.items()}
             for e in enemies:
                 e["role"] = role_of.get(e.get("id"))
@@ -416,7 +416,7 @@ def live_view(game: dict, dd: DDragon, ugg: UGG | None = None, my_build: dict | 
         "score": {"ally": totals(allies, my_team), "enemy": totals(enemies, enemy_team)},
         "objectives": timers,
         "spells": spells_view(players, views, spell_uses or {}, dd),
-        "augments": augments_view(me["id"], ugg) if ugg and me and me.get("id") and mode.get("mayhem") else None,
+        "augments": augments_view(me["id"], stats) if stats and me and me.get("id") and mode.get("mayhem") else None,
         "build": my_build,
         "buildProgress": progress,
         "advice": advice,

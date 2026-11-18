@@ -175,7 +175,7 @@ class ChampSelectState:
 
 
 def parse_champ_select(session: dict) -> ChampSelectState:
-    from .ugg import LCU_POSITIONS
+    from .stats import LCU_POSITIONS
 
     me = session.get("localPlayerCellId")
     # A pick action that is completed means that player has locked in.

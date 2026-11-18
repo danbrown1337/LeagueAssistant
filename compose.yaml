@@ -11,3 +11,28 @@ services:
       AGENT_TOKEN: ${AGENT_TOKEN:?Set AGENT_TOKEN in .env}
       UGG_REGION: ${UGG_REGION:-world}
       UGG_RANK: ${UGG_RANK:-emerald_plus}
+
+  # Collects matches from the Riot API into matches.db (in the riot-data volume) for our own stats.
+  # Off unless .env has COMPOSE_PROFILES=collector and RIOT_API_KEY. A development key expires every
+  # 24 hours: when the logs say it was rejected, put a new one in .env and run `docker compose up -d collector`.
+  collector:
+    profiles: [collector]
+    image: leagueassistant:latest
+    container_name: leagueassistant-collector
+    restart: unless-stopped
+    command: ["leagueassistant", "collect"]
+    environment:
+      RIOT_API_KEY: ${RIOT_API_KEY:-}
+      RIOT_PLATFORM: ${RIOT_PLATFORM:-na1}
+      COLLECT_TIERS: ${COLLECT_TIERS:-challenger,grandmaster,master,diamond,emerald}
+      COLLECT_QUEUES: ${COLLECT_QUEUES:-420,450,2400}
+      LEAGUEASSISTANT_DATA: /data
+    volumes:
+      - riot-data:/data
+    healthcheck:
+      disable: true
+    depends_on:
+      - leagueassistant
+
+volumes:
+  riot-data:

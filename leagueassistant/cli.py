@@ -13,6 +13,9 @@ Quick lookups from any machine:
     leagueassistant build ahri mid
     leagueassistant counters yasuo mid
     leagueassistant history
+
+Collect matches from the Riot API into a database (runs on the homelab):
+    leagueassistant collect
 """
 
 from __future__ import annotations
@@ -25,26 +28,27 @@ import sys
 from . import advisor, lcu
 from .ddragon import DDragon
 from .riot import RiotAPI
-from .ugg import RANKS, REGIONS, UGG, normalize_role
+from .stats import SOURCES, StatsSource, make_source, normalize_role
+from .ugg import RANKS, REGIONS
 
 
-def make_clients(args) -> tuple[DDragon, UGG]:
+def make_clients(args) -> tuple[DDragon, StatsSource]:
     dd = DDragon()
-    return dd, UGG(dd.patch, region=args.region, rank=args.rank)
+    return dd, make_source(args.source, dd.patch, region=args.region, rank=args.rank)
 
 
 def cmd_build(args):
-    dd, ugg = make_clients(args)
+    dd, src = make_clients(args)
     cid = dd.champion_id(args.champion)
     role = normalize_role(args.role) if args.role else None
-    print(advisor.format_build(ugg.build(cid, role), dd))
+    print(advisor.format_build(src.build(cid, role), dd))
 
 
 def cmd_counters(args):
-    dd, ugg = make_clients(args)
+    dd, src = make_clients(args)
     cid = dd.champion_id(args.champion)
-    role = normalize_role(args.role) if args.role else ugg.main_role(cid)
-    picks = ugg.counters(cid, role, min_matches=args.min_games, limit=args.limit)
+    role = normalize_role(args.role) if args.role else src.main_role(cid)
+    picks = src.counters(cid, role, min_matches=args.min_games, limit=args.limit)
     print(advisor.format_counters(cid, role, picks, dd))
 
 
@@ -69,9 +73,22 @@ def cmd_agent(args):
     Agent(args.server, token=args.token, lockfile=args.lockfile, interval=args.interval, runes=args.runes).run()
 
 
+def cmd_collect(args):
+    from . import collector
+    from .riot import RiotAPI
+
+    api = RiotAPI(platform=args.platform)
+    db = collector.connect(args.db or collector.default_db())
+    c = collector.Collector(api, db, [t.strip() for t in args.tiers.split(",") if t.strip()],
+                            [int(q) for q in args.queues.split(",") if q.strip()])
+    print(f"Collecting {args.queues} matches from {args.platform} ({args.tiers}) into {args.db or collector.default_db()}")
+    c.run()
+
+
 def cmd_serve(args):
     import uvicorn
 
+    os.environ.setdefault("STATS_SOURCE", args.source)
     os.environ.setdefault("UGG_REGION", args.region)
     os.environ.setdefault("UGG_RANK", args.rank)
     os.environ.setdefault("MIN_GAMES", str(args.min_games))
@@ -100,6 +117,7 @@ def cmd_local(args):
     # Only this process talks to its own server, so a fresh token each run is enough.
     token = secrets.token_hex(16)
     os.environ["AGENT_TOKEN"] = token
+    os.environ.setdefault("STATS_SOURCE", args.source)
     os.environ.setdefault("UGG_REGION", args.region)
     os.environ.setdefault("UGG_RANK", args.rank)
     os.environ.setdefault("MIN_GAMES", str(args.min_games))
@@ -150,6 +168,7 @@ def cmd_local(args):
 def main(argv=None):
     p = argparse.ArgumentParser(prog="leagueassistant", description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    p.add_argument("--source", default="ugg", choices=SOURCES, help="Where champion stats come from (default: ugg)")
     p.add_argument("--region", default="world", choices=REGIONS, help="U.gg stats region (default: world)")
     p.add_argument("--rank", default="emerald_plus", choices=RANKS, help="U.gg rank filter (default: emerald_plus)")
     p.add_argument("--lockfile", help="Path to the League client lockfile if it can't be found automatically")
@@ -181,7 +200,7 @@ def main(argv=None):
                     help="Don't install new versions from GitHub automatically (the .exe only)")
     lo.set_defaults(func=cmd_local)
 
-    b = sub.add_parser("build", help="Show the U.gg build for a champion")
+    b = sub.add_parser("build", help="Show the build for a champion")
     b.add_argument("champion")
     b.add_argument("role", nargs="?")
     b.set_defaults(func=cmd_build)
@@ -198,13 +217,22 @@ def main(argv=None):
     h.add_argument("--routing", default="americas", help="Riot API region: americas, europe, asia or sea")
     h.set_defaults(func=cmd_history)
 
+    co = sub.add_parser("collect", help="Collect matches from the Riot API into a database (needs RIOT_API_KEY)")
+    co.add_argument("--platform", default=os.environ.get("RIOT_PLATFORM", "na1"), help="Server to collect from (default: na1)")
+    co.add_argument("--tiers", default=os.environ.get("COLLECT_TIERS", "challenger,grandmaster,master,diamond,emerald"),
+                    help="Tiers to collect players from")
+    co.add_argument("--queues", default=os.environ.get("COLLECT_QUEUES", "420,450,2400"),
+                    help="Queue ids (default: ranked solo, ARAM, ARAM: Mayhem)")
+    co.add_argument("--db", help="Database file (default: matches.db in the data folder)")
+    co.set_defaults(func=cmd_collect)
+
     frozen = getattr(sys, "frozen", False)  # the Windows .exe
     if argv is None:
         argv = sys.argv[1:]
     if frozen and not any(a in sub.choices for a in argv):
         # Double-clicked or run with only options: run everything. Shared options go before
         # the command and the rest after it.
-        shared = {"--region", "--rank", "--lockfile", "--min-games"}
+        shared = {"--source", "--region", "--rank", "--lockfile", "--min-games"}
         before, after, it = [], [], iter(argv)
         for a in it:
             if a.split("=", 1)[0] in shared:

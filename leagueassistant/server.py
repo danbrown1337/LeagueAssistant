@@ -1,9 +1,10 @@
-"""Web server: receives agent snapshots, adds U.gg advice, streams it to browsers.
+"""Web server: receives agent snapshots, adds build advice, streams it to browsers.
 
 Run with `leagueassistant serve` or the Docker image. Settings come from
 environment variables:
 
     AGENT_TOKEN   shared secret the agent must send (recommended)
+    STATS_SOURCE  where champion stats come from (default ugg; see stats.py)
     UGG_REGION    U.gg stats region (default world)
     UGG_RANK      U.gg rank filter (default emerald_plus)
     MIN_GAMES     ignore matchups with fewer games (default 100)
@@ -29,7 +30,7 @@ from . import advisor, lcu
 from .gamelog import GameLog
 from .updater import current_build
 from .ddragon import DDragon
-from .ugg import UGG, normalize_role
+from .stats import StatsSource, make_source, normalize_role
 
 log = logging.getLogger("leagueassistant.server")
 
@@ -39,22 +40,23 @@ STATS_REFRESH = 6 * 3600  # re-check the patch this often
 
 
 class Stats:
-    """Data Dragon and U.gg clients, rebuilt when a new patch comes out."""
+    """Data Dragon and the stats source, rebuilt when a new patch comes out."""
 
-    def __init__(self, region: str, rank: str):
-        self.region, self.rank = region, rank
+    def __init__(self, region: str, rank: str, source: str = "ugg"):
+        self.region, self.rank, self.source = region, rank, source
+        make_source(source, "1.1", region, rank)  # fail at startup on an unknown source
         self.loaded_at = 0.0
         self.dd: DDragon | None = None
-        self.ugg: UGG | None = None
+        self.champ_stats: StatsSource | None = None
 
-    def get(self) -> tuple[DDragon, UGG]:
+    def get(self) -> tuple[DDragon, StatsSource]:
         if self.dd is None or time.time() - self.loaded_at > STATS_REFRESH:
             dd = DDragon()
             if self.dd is None or dd.version != self.dd.version:
-                self.dd, self.ugg = dd, UGG(dd.patch, region=self.region, rank=self.rank)
-                log.info("Using patch %s", dd.patch)
+                self.dd, self.champ_stats = dd, make_source(self.source, dd.patch, self.region, self.rank)
+                log.info("Using patch %s, stats from %s", dd.patch, self.source)
             self.loaded_at = time.time()
-        return self.dd, self.ugg
+        return self.dd, self.champ_stats
 
 
 class Hub:
@@ -89,7 +91,7 @@ class Hub:
             "mode": None,
             "mmr": [],
             "history": [],
-            "stats": {"region": stats.region, "rank": stats.rank, "patch": None},
+            "stats": {"source": stats.source, "region": stats.region, "rank": stats.rank, "patch": None},
             "build": current_build(),
             "updatedAt": 0,
         }
@@ -97,7 +99,7 @@ class Hub:
     # --- Updates from the agent ---
 
     def _process(self, snap: dict):
-        dd, ugg = self.stats.get()
+        dd, src = self.stats.get()
         s = self.state
         s["stats"]["patch"] = dd.patch
         s["agentOnline"] = True
@@ -119,7 +121,7 @@ class Hub:
                    tuple((p["champion"], p["locked"]) for p in state.my_team), tuple(state.bench), mode["gameMode"])
             if key != self.select_key:
                 pool = set(snap.get("pickable") or []) or None
-                s["champSelect"] = advisor.champ_select_view(state, ugg, dd, pool=pool, min_matches=self.min_games,
+                s["champSelect"] = advisor.champ_select_view(state, src, dd, pool=pool, min_matches=self.min_games,
                                                              mode=mode)
                 self.select_key = key
                 self.my_build = s["champSelect"].get("build")
@@ -155,7 +157,7 @@ class Hub:
             self._save_debug(live)  # as the game sent it
             live = self._keep_boots(live, dd)
             self.last_game_time = t
-            s["live"] = advisor.live_view(live, dd, ugg, self._build_for_live(live, dd, ugg, mode), mode=mode,
+            s["live"] = advisor.live_view(live, dd, src, self._build_for_live(live, dd, src, mode), mode=mode,
                                           spell_uses=self.spell_uses)
             s["live"]["boots"] = {"id": self.my_boots, "source": self.boots_source,
                                   "choices": self._boots_choices(dd)}
@@ -187,7 +189,7 @@ class Hub:
         except Exception:
             log.exception("Couldn't record the game")  # never break the dashboard over logging
 
-    def _build_for_live(self, game: dict, dd: DDragon, ugg: UGG, mode: dict) -> dict | None:
+    def _build_for_live(self, game: dict, dd: DDragon, src: StatsSource, mode: dict) -> dict | None:
         # Reuse the champ select build; look it up fresh if the agent started mid-game.
         if mode["kind"] == "other":
             return None
@@ -199,7 +201,7 @@ class Hub:
         if b and b["champion"]["id"] == me["id"] and (b["role"] == "aram") == aram:
             return b
         try:
-            self.my_build = advisor.full_build_view(me["id"], None if aram else me.get("role"), ugg, dd, aram=aram)
+            self.my_build = advisor.full_build_view(me["id"], None if aram else me.get("role"), src, dd, aram=aram)
         except LookupError:
             self.my_build = None
         return self.my_build
@@ -359,7 +361,8 @@ class Hub:
 
 
 def create_app() -> FastAPI:
-    stats = Stats(os.environ.get("UGG_REGION", "world"), os.environ.get("UGG_RANK", "emerald_plus"))
+    stats = Stats(os.environ.get("UGG_REGION", "world"), os.environ.get("UGG_RANK", "emerald_plus"),
+                  os.environ.get("STATS_SOURCE", "ugg"))
     gamelog = GameLog(build=current_build()) if os.environ.get("LEAGUEASSISTANT_LOG", "1") != "0" else None
     hub = Hub(stats, os.environ.get("AGENT_TOKEN") or None, int(os.environ.get("MIN_GAMES", "100")), gamelog)
 
@@ -418,30 +421,30 @@ def create_app() -> FastAPI:
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
     def lookup(champion: str, role: str | None):
-        dd, ugg = stats.get()
+        dd, src = stats.get()
         try:
             cid = dd.champion_id(champion)
             if role == "aram":
-                return dd, ugg, cid, role
-            role = normalize_role(role) if role else ugg.main_role(cid)
+                return dd, src, cid, role
+            role = normalize_role(role) if role else src.main_role(cid)
         except (KeyError, ValueError) as e:
             raise HTTPException(404, str(e))
-        return dd, ugg, cid, role
+        return dd, src, cid, role
 
     @app.get("/api/build/{champion}")
     def build(champion: str, role: str | None = None):
-        dd, ugg, cid, role = lookup(champion, role)
+        dd, src, cid, role = lookup(champion, role)
         try:
-            return advisor.full_build_view(cid, None if role == "aram" else role, ugg, dd, aram=role == "aram")
+            return advisor.full_build_view(cid, None if role == "aram" else role, src, dd, aram=role == "aram")
         except LookupError as e:
             raise HTTPException(404, str(e))
 
     @app.get("/api/counters/{champion}")
     def counters(champion: str, role: str | None = None, limit: int = 8):
-        dd, ugg, cid, role = lookup(champion, role)
+        dd, src, cid, role = lookup(champion, role)
         if role == "aram":
             return {"champion": advisor.champ_ref(cid, dd), "role": role, "counters": []}
-        picks = ugg.counters(cid, role, min_matches=hub.min_games, limit=limit)
+        picks = src.counters(cid, role, min_matches=hub.min_games, limit=limit)
         return {"champion": advisor.champ_ref(cid, dd), "role": role, "counters": advisor.counter_views(picks, dd)}
 
     @app.get("/api/champions")

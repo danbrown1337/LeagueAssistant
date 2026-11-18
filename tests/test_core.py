@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 
 from leagueassistant import advisor, lcu
-from leagueassistant.ugg import UGG, Matchup, parse_build, shrunk_win_rate
+from leagueassistant.stats import Matchup, shrunk_win_rate
+from leagueassistant.ugg import UGG, parse_build
 
 HERE = Path(__file__).parent
 
@@ -245,3 +246,14 @@ def test_agent_imports_each_rune_page_once_and_retries_failures(monkeypatch):
     assert calls == ["Ahri Mid", "Ahri Mid"] and a.runes_status == {"ok": True, "name": "Ahri Mid", "note": "created"}
     a._apply_runes({**page, "name": "Jinx Bot"})  # champion changed: written again
     assert calls[-1] == "Jinx Bot"
+
+
+def test_make_source():
+    import pytest
+
+    from leagueassistant.stats import StatsSource, make_source
+
+    src = make_source("ugg", "16.19", region="euw", rank="master")
+    assert isinstance(src, StatsSource) and (src.patch, src.region, src.rank) == ("16.19", "euw", "master")
+    with pytest.raises(ValueError):
+        make_source("nope", "16.19")

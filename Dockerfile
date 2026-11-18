@@ -6,7 +6,8 @@ WORKDIR /app
 COPY pyproject.toml README.md ./
 COPY leagueassistant ./leagueassistant
 RUN pip install --no-cache-dir ".[server]" \
-    && useradd --system --uid 1000 app
+    && useradd --system --uid 1000 app \
+    && mkdir /data && chown app /data
 
 USER app
 EXPOSE 8080
