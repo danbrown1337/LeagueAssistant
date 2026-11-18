@@ -121,3 +121,14 @@ def test_riot_api_retries_rate_limits_and_rejects_bad_keys():
     with pytest.raises(KeyRejected):
         api.match("NA1_3")
     assert api.base == "https://americas.api.riotgames.com"
+
+
+def test_restart_keeps_a_recent_player_list():
+    api, db = FakeAPI(), collector.connect(":memory:")
+    collector.Collector(api, db, ["master"], [420], clock=lambda: 2_000_000).step()
+    calls = []
+    api.apex_league = lambda tier: calls.append(tier) or []
+    collector.Collector(api, db, ["master"], [420], clock=lambda: 2_000_000 + 3600).step()
+    assert calls == []  # refreshed an hour ago: not again
+    collector.Collector(api, db, ["master"], [420], clock=lambda: 2_000_000 + collector.PLAYERS_REFRESH + 1).step()
+    assert calls == ["master"]

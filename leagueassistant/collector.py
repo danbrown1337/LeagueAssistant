@@ -164,7 +164,8 @@ class Collector:
                  batch: int = 20, clock=time.time):
         self.api, self.db, self.tiers, self.queues = api, db, [t.lower() for t in tiers], queues
         self.batch, self.clock = batch, clock
-        self.players_at = 0.0
+        # From the database, so a restart (like a new development key) doesn't redo a recent refresh.
+        self.players_at = float(db.execute("SELECT MAX(seen_at) FROM players").fetchone()[0] or 0)
 
     def refresh_players(self):
         """Add everyone currently in the chosen tiers to the player list."""
